@@ -13,6 +13,7 @@ DATABASE_SCHEMA=os.environ.get('BAROMETR_DB_SCHEMA','')
 if DATABASE_SCHEMA and not re.fullmatch(r'[a-z_][a-z0-9_]{0,62}',DATABASE_SCHEMA):
     raise RuntimeError('BAROMETR_DB_SCHEMA must be a lowercase PostgreSQL schema name')
 if not DATABASE_URL and not TEST_DB: raise RuntimeError('DATABASE_URL is required')
+FREE_UNLOCKS=os.environ.get('BAROMETR_FREE_UNLOCKS','1')=='1'
 SESSION_DAYS=7
 COOKIE='barometr_session'
 SECURE=os.environ.get('BAROMETR_TEST_HTTP')!='1'
@@ -141,7 +142,7 @@ def textfield(data,key,minimum=1,maximum=64):
     v=unicodedata.normalize('NFKC',v).strip()
     if len(v)<minimum or len(v)>maximum or any(ord(x)<32 for x in v):raise ApiError('Zkontrolujte délku a obsah polí.')
     return v
-def authenticated(admin=False):
+def authenticated(admin=False,bottles=False):
     def decorator(fn):
         @wraps(fn)
         def wrapped(*args,**kwargs):
@@ -150,6 +151,7 @@ def authenticated(admin=False):
                 row=one(c,"SELECT u.*,s.csrf,s.token_hash FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=%s AND s.expires_at>%s AND u.status='active'",(digest(token),time.time()))
                 if not row:raise ApiError('Přihlaste se prosím.',401)
                 if admin and row['role']!='admin':raise ApiError('Tato akce je dostupná pouze administrátorům.',403)
+                if bottles and not (FREE_UNLOCKS or row['role']=='admin'):raise ApiError('Odemykání a práce s lahvemi je pro běžné účty zatím vypnutá.',403)
                 if request.method in ('POST','PUT','PATCH','DELETE') and not hmac.compare_digest(request.headers.get('X-CSRF-Token',''),row['csrf']):raise ApiError('Obnovte stránku a zkuste to znovu.',403)
                 if not row['last_seen'] or time.time()-row['last_seen']>45:execute(c,'UPDATE users SET last_seen=%s WHERE id=%s',(time.time(),row['id']))
                 g.user=row
@@ -207,8 +209,8 @@ def register():
 def me():
     with db() as c:
         unlocked=allrows(c,'SELECT product_id,created_at FROM unlocks WHERE user_id=%s',(g.user['id'],))
-        state=json.loads(g.user['state_json']);state.update(unlocks={r['product_id']:{'reason':'admin','paid':0,'at':r['created_at']*1000} for r in unlocked},ownerPreview=g.user['role']=='admin')
-        return jsonify(user=public_user(g.user),csrf=g.user['csrf'],state=state)
+        state=json.loads(g.user['state_json']);state.update(unlocks={r['product_id']:{'reason':'free','paid':0,'at':r['created_at']*1000} for r in unlocked},ownerPreview=g.user['role']=='admin')
+        return jsonify(user=public_user(g.user),csrf=g.user['csrf'],state=state,freeUnlocks=FREE_UNLOCKS)
 @app.post('/api/logout')
 @authenticated()
 def logout():
@@ -223,9 +225,9 @@ def shop_offers():
     current=choose_week(SHOP_TEMPLATES)
     with db() as c:owned={r['product_id'] for r in allrows(c,'SELECT product_id FROM unlocks WHERE user_id=%s',(g.user['id'],))}
     current['offers']=[quote(t,PRODUCTS,owned) for t in current['offers']]
-    return jsonify(**current,templateCount=len(SHOP_TEMPLATES),paymentsEnabled=False,adminFree=g.user['role']=='admin')
+    return jsonify(**current,templateCount=len(SHOP_TEMPLATES),paymentsEnabled=False,freeUnlocks=FREE_UNLOCKS,adminFree=g.user['role']=='admin')
 @app.post('/api/shop/bundles/<bundle_id>/unlock')
-@authenticated(admin=True)
+@authenticated(bottles=True)
 def unlock_bundle(bundle_id):
     data=body();current=choose_week(SHOP_TEMPLATES)
     if data.get('weekKey')!=current['weekKey']:raise ApiError('Nabídka se změnila. Načtěte aktuální balíčky.',409)
@@ -238,7 +240,7 @@ def unlock_bundle(bundle_id):
         if added:audit(c,g.user['id'],'bundle_unlocked',template['title'])
     return jsonify(ok=True,productIds=template['productIds'],addedCount=added,paidCents=0,currency='EUR')
 @app.post('/api/unlocks')
-@authenticated(admin=True)
+@authenticated(bottles=True)
 def unlock():
     id=body().get('productId')
     if id not in PRODUCTS:raise ApiError('Produkt neexistuje.',404)
@@ -251,7 +253,7 @@ def unlock():
 def product(id):
     if id not in PRODUCTS:raise ApiError('Produkt neexistuje.',404)
     with db() as c:
-        if g.user['role']!='admin' or not one(c,'SELECT product_id FROM unlocks WHERE user_id=%s AND product_id=%s',(g.user['id'],id)):raise ApiError('Otevření lahví je pro testovací uživatele zatím vypnuté.',403)
+        if not (FREE_UNLOCKS or g.user['role']=='admin') or not one(c,'SELECT product_id FROM unlocks WHERE user_id=%s AND product_id=%s',(g.user['id'],id)):raise ApiError('Nejdříve odemkněte produkt.',403)
         audit(c,g.user['id'],'product_opened',PRODUCTS[id]['name'])
     return jsonify(PRODUCTS[id])
 @app.get('/api/barcode/<code>')
@@ -277,7 +279,7 @@ def read_calibration(c,user_id,product_id,capacity):
     row=one(c,'SELECT points_json,updated_at FROM bottle_calibrations WHERE user_id=%s AND product_id=%s AND capacity=%s',(user_id,product_id,capacity))
     return {'productId':product_id,'capacity':capacity,'points':json.loads(row['points_json']),'updatedAt':row['updated_at'],'accuracyVerified':False} if row else None
 @app.route('/api/calibrations/<product_id>/<int:capacity>',methods=['GET','PUT'])
-@authenticated(admin=True)
+@authenticated(bottles=True)
 def calibration_profile(product_id,capacity):
     from server.calibration import validate_points,CalibrationError
     if product_id not in PRODUCTS or capacity not in [v['ml'] for v in PRODUCTS[product_id]['variants']]:raise ApiError('Neplatná varianta lahve.')
@@ -314,7 +316,7 @@ def vision_analyze():
     return jsonify(result)
 
 @app.put('/api/scan-photos/<photo_id>')
-@authenticated(admin=True)
+@authenticated(bottles=True)
 def put_scan_photo(photo_id):
     import base64,binascii
     if not re.fullmatch(r'[a-zA-Z0-9-]{1,100}',photo_id):raise ApiError('Neplatné ID snímku.')
@@ -348,9 +350,9 @@ def put_state():
     plan=data.get('inventoryPlan',old.get('inventoryPlan',{'entries':[]}))
     if not isinstance(plan,dict) or not isinstance(plan.get('entries'),list) or len(plan['entries'])>500:raise ApiError('Neplatný plán inventury.')
     if plan.get('runId') is not None and (not isinstance(plan['runId'],str) or not re.fullmatch(r'[a-zA-Z0-9-]{1,48}',plan['runId'])):raise ApiError('Neplatné kolo inventury.')
-    if g.user['role']!='admin' and plan['entries']:raise ApiError('Inventura zatím není pro uživatele povolená.',403)
-    if g.user['role']!='admin' and (data.get('rows') or data.get('records')):raise ApiError('Evidence lahví zatím není pro uživatele povolená.',403)
-    if g.user['role']=='admin':
+    if not (FREE_UNLOCKS or g.user['role']=='admin') and plan['entries']:raise ApiError('Inventura zatím není pro uživatele povolená.',403)
+    if not (FREE_UNLOCKS or g.user['role']=='admin') and (data.get('rows') or data.get('records')):raise ApiError('Evidence lahví zatím není pro uživatele povolená.',403)
+    if FREE_UNLOCKS or g.user['role']=='admin':
         rows=data.get('rows',[]);records=data.get('records',[])
         if not isinstance(rows,list) or len(rows)>500 or not isinstance(records,list) or len(records)>3000:raise ApiError('Příliš mnoho záznamů.')
         with db() as c:ids={r['product_id'] for r in allrows(c,'SELECT product_id FROM unlocks WHERE user_id=%s',(g.user['id'],))}
@@ -465,7 +467,7 @@ def change_password():
 def health():
     with db() as c:execute(c,'SELECT 1')
     from server.vision import configuration
-    return jsonify(status='ok',automaticLevelEnabled=configuration()['enabled'],shopBundleTemplates=len(SHOP_TEMPLATES))
+    return jsonify(status='ok',freeUnlocks=FREE_UNLOCKS,automaticLevelEnabled=configuration()['enabled'],shopBundleTemplates=len(SHOP_TEMPLATES))
 @app.get('/')
 def index():return send_from_directory(WEB,'index.html')
 @app.get('/app.js')

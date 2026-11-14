@@ -29,9 +29,10 @@ def test_session_and_privilege_enforcement():
  assert u.get('/api/admin/users').status_code==403
  assert u.post('/api/admin/invites',json={},headers=uh).status_code==403
  p=next(iter(PRODUCTS))
- assert u.post('/api/unlocks',json={'productId':p},headers=uh).status_code==403
  assert u.get('/api/products/'+p).status_code==403
- assert u.put('/api/state',json={'ownerPreview':True,'rows':[{}],'records':[]},headers=uh).status_code==403
+ assert u.post('/api/unlocks',json={'productId':p},headers=uh).status_code==200
+ assert u.get('/api/products/'+p).status_code==200
+ assert u.put('/api/state',json={'ownerPreview':True,'rows':[{}],'records':[]},headers=uh).status_code==400
  assert u.post('/api/activity',json={'action':'catalog'},headers=uh).status_code==200
  assert u.post('/api/activity',json={'action':'steal','detail':'arbitrary'},headers=uh).status_code==400
  repeat=app.test_client().post('/api/register',json={'firstName':'Eva','lastName':'Nová','username':'tester_repeat','password':'safe-test-password','inviteCode':code});assert repeat.status_code==400
@@ -187,7 +188,10 @@ def test_database_bundle_pool_atomic_idempotent_unlock_and_expiry(monkeypatch):
  assert u.post('/api/register',json={'firstName':'Shop','lastName':'Test','username':'shop_user','password':'safe-test-password','inviteCode':code}).status_code==200
  uh={'X-CSRF-Token':u.get('/api/me').json['csrf']}
  assert u.get('/api/shop').status_code==200
- assert u.post(endpoint,json={'weekKey':shop['weekKey']},headers=uh).status_code==403
+ result=u.post(endpoint,json={'weekKey':shop['weekKey']},headers=uh)
+ assert result.status_code==200 and result.json['paidCents']==0
+ assert all(id in u.get('/api/me').json['state']['unlocks'] for id in pack['productIds'])
+ assert u.get('/api/me').json['state'].get('rows',[])==[]
  # A failure in the middle of a bundle must roll back the entire unlock transaction.
  pack=next(t for t in a.get('/api/shop').json['offers'] if t['kind']=='collection' and t['remainingCount']>2)
  before=a.get('/api/me').json['state']['unlocks'];original=execute;attempts=[0]
@@ -214,3 +218,35 @@ def test_calibration_profile_is_private_and_scoped_to_capacity():
  assert app.test_client().get(path).status_code==401
  assert a.put(path,json={'points':points[:-1],'measured':True},headers=h).status_code==400
  assert a.get(path).json['profile']['points']==points
+
+
+def test_regular_user_free_unlocks_inventory_and_temporary_switch(monkeypatch):
+ a,h=login();code=invite(a,h)['code'];u=app.test_client()
+ assert u.post('/api/register',json={'firstName':'Free','lastName':'User','username':'free_unlock_user','password':'safe-test-password','inviteCode':code}).status_code==200
+ uh={'X-CSRF-Token':u.get('/api/me').json['csrf']}
+ assert u.get('/api/me').json['freeUnlocks'] is True
+ assert u.get('/api/shop').json['freeUnlocks'] is True
+ assert u.get('/api/shop').json['paymentsEnabled'] is False
+ ids=list(PRODUCTS)[:5]
+ for product_id in ids:
+  assert u.post('/api/unlocks',json={'productId':product_id}).status_code==403
+  assert u.post('/api/unlocks',json={'productId':product_id},headers=uh).status_code==200
+  assert u.get('/api/products/'+product_id).status_code==200
+ assert len(u.get('/api/me').json['state']['unlocks'])==5
+ assert u.post('/api/unlocks',json={'productId':ids[0]},headers=uh).status_code==200
+ assert len(u.get('/api/me').json['state']['unlocks'])==5
+ product_id=ids[0];capacity=PRODUCTS[product_id]['variants'][0]['ml']
+ row={'id':'ordinary-bottle','productId':product_id,'capacity':capacity,'label':'Moje lahev','ml':capacity,'start':capacity,'sold40':0,'sold20':0,'otherMl':0}
+ state={'rows':[row],'records':[],'inventoryPlan':{'entries':[{'id':'ordinary-plan','productId':product_id,'capacity':capacity,'label':'Moje lahev','status':'pending','rowId':row['id']}]}}
+ assert u.put('/api/state',json=state,headers=uh).status_code==200
+ assert u.get('/api/me').json['state']['rows']==[row]
+ other=next(id for id in PRODUCTS if id not in ids)
+ assert u.put('/api/state',json={**state,'rows':[{**row,'productId':other}]},headers=uh).status_code==400
+ assert u.get('/api/calibrations/'+product_id+'/'+str(capacity)).status_code==200
+ assert u.get('/api/admin/users').status_code==403
+ assert app.test_client().post('/api/unlocks',json={'productId':product_id}).status_code==401
+ monkeypatch.setattr('server.app.FREE_UNLOCKS',False)
+ assert u.get('/api/me').json['freeUnlocks'] is False
+ assert u.post('/api/unlocks',json={'productId':other},headers=uh).status_code==403
+ assert u.get('/api/products/'+product_id).status_code==403
+ assert a.post('/api/unlocks',json={'productId':other},headers=h).status_code==200

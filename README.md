@@ -13,7 +13,7 @@
 - Ruční odečet, kalibrované vážení a soukromé vícebodové profily pro konkrétní produkt a kapacitu.
 - Volitelné napojení automatické AI analýzy. Bez serverové konfigurace se nespouští; přesnost na reálných lahvích zatím není ověřená.
 
-**Platby nejsou spuštěné.** Běžní testovací uživatelé nabídky prohlížejí, administrátor odemyká zdarma. Odemykání neznamená vytvoření fyzické lahve ani ověřenou kalibraci všech hladin.
+**Platby nejsou spuštěné.** Všichni přihlášení uživatelé dočasně odemykají produkty i balíčky zdarma bez omezení počtu. Ceny zůstávají informativně zobrazené. Odemykání neznamená vytvoření fyzické lahve ani ověřenou kalibraci všech hladin.
 
 ## Spuštění a ověření
 
