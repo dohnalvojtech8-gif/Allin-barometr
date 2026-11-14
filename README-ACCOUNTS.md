@@ -21,3 +21,11 @@ Schéma `barometr` a jeho deset tabulek jsou připravené v projektu Supabase pr
 Před změnou produkčního DATABASE_URL je nutné přenést a ověřit existující účty, inventury, fotografie, pozvánky a další záznamy. Připravené tabulky samy o sobě neznamenají přepnutí běžící aplikace. Původní Render databázi neodstraňovat před dokončením migrace a ověřením dat.
 
 Bez BAROMETR_DB_SCHEMA se chování dosavadní databáze nemění. Pokud konfiguraci spravuje Blueprint, jeho DATABASE_URL nyní stále odkazuje na Render databázi přes fromDatabase; při přechodu je nutné upravit i tento zdroj konfigurace, aby další synchronizace nevrátila staré připojení.
+
+## Produkční převod do Supabase a skladová evidence
+
+`SUPABASE_DATABASE_URL` je oddělené připojení do Supabase (Session pooler, TLS). Původní `DATABASE_URL` zůstává zdrojem a zálohou; Blueprint ho nepřepisuje. Při prvním startu nové verze server zamkne zápisy původních tabulek, zkopíruje všech deset tabulek do neveřejného schématu `barometr` a ověří počty i SHA-256 otisky všech řádků. Tím zachová ID, scrypt hesla, jména, role, odemčení, stav inventur, fotografie, relace a pozvánky. Až úspěšná transakce zapíše migrační značku, začne aplikace používat Supabase. Další starty migraci neopakují a nepřepisují novější data starou zálohou. Zdrojový zámek se uvolní po 120 sekundách, aby staré instance nemohly přijmout pozdní zápis během přepnutí provozu.
+
+`/healthz` uvádí verzi a aktivní databázový backend bez přihlašovacích údajů. Chyba připojení nebo rozdíl při kontrole migraci zastaví; databáze se nemažou.
+
+Nová tabulka `stock_documents` uchovává sklady, vlastní produkty, uzavřené a rozpracované inventury, pohyby a měsíční porovnání odděleně pro každý účet. `/api/stock` vyžaduje přihlášení a CSRF. Optimistická revize brání přepsání novějších dat jiným zařízením. Schéma není přístupné rolím anon/authenticated.

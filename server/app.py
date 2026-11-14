@@ -7,9 +7,11 @@ from flask import Flask, request, jsonify, g, send_from_directory, make_response
 
 ROOT=Path(__file__).resolve().parent.parent
 WEB=Path(__file__).resolve().parent/'web'
-DATABASE_URL=os.environ.get('DATABASE_URL')
+SOURCE_DATABASE_URL=os.environ.get('DATABASE_URL')
+SUPABASE_DATABASE_URL=os.environ.get('SUPABASE_DATABASE_URL')
+DATABASE_URL=SUPABASE_DATABASE_URL or SOURCE_DATABASE_URL
 TEST_DB=os.environ.get('BAROMETR_TEST_DB')
-DATABASE_SCHEMA=os.environ.get('BAROMETR_DB_SCHEMA','')
+DATABASE_SCHEMA='barometr' if SUPABASE_DATABASE_URL else os.environ.get('BAROMETR_DB_SCHEMA','')
 if DATABASE_SCHEMA and not re.fullmatch(r'[a-z_][a-z0-9_]{0,62}',DATABASE_SCHEMA):
     raise RuntimeError('BAROMETR_DB_SCHEMA must be a lowercase PostgreSQL schema name')
 if not DATABASE_URL and not TEST_DB: raise RuntimeError('DATABASE_URL is required')
@@ -18,7 +20,7 @@ SESSION_DAYS=7
 COOKIE='barometr_session'
 SECURE=os.environ.get('BAROMETR_TEST_HTTP')!='1'
 app=Flask(__name__,static_folder=None)
-app.config.update(MAX_CONTENT_LENGTH=512*1024,JSON_SORT_KEYS=False)
+app.config.update(MAX_CONTENT_LENGTH=4*1024*1024,JSON_SORT_KEYS=False)
 
 def connect():
     if TEST_DB:
@@ -50,6 +52,7 @@ def password_ok(value,hashed):
 DUMMY=password_hash(secrets.token_urlsafe(24))
 SCHEMA=[
 '''CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT NOT NULL, username_key TEXT UNIQUE NOT NULL, first_name TEXT NOT NULL, last_name TEXT NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin','user')), status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','suspended')), created_at DOUBLE PRECISION NOT NULL, last_login DOUBLE PRECISION, last_seen DOUBLE PRECISION, login_count INTEGER NOT NULL DEFAULT 0, state_json TEXT NOT NULL DEFAULT '{}')''',
+'''CREATE TABLE IF NOT EXISTS stock_documents (user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,revision INTEGER NOT NULL DEFAULT 0,data_json TEXT NOT NULL,updated_at DOUBLE PRECISION NOT NULL)''',
 '''CREATE TABLE IF NOT EXISTS shop_bundles (id TEXT PRIMARY KEY,kind TEXT NOT NULL,template_json TEXT NOT NULL,created_at DOUBLE PRECISION NOT NULL)''',
 '''CREATE TABLE IF NOT EXISTS bottle_calibrations (user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,product_id TEXT NOT NULL,capacity INTEGER NOT NULL,points_json TEXT NOT NULL,updated_at DOUBLE PRECISION NOT NULL,PRIMARY KEY(user_id,product_id,capacity))''',
 '''CREATE TABLE IF NOT EXISTS scan_photos (id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,jpeg TEXT NOT NULL,created_at DOUBLE PRECISION NOT NULL)''',
@@ -67,6 +70,9 @@ def audit(c,user_id,action,detail=''):
 def init_db():
     with db() as c:
         for sql in SCHEMA:execute(c,sql)
+        if SUPABASE_DATABASE_URL and not TEST_DB:
+            execute(c,'ALTER TABLE stock_documents ENABLE ROW LEVEL SECURITY')
+            execute(c,'REVOKE ALL ON stock_documents FROM PUBLIC,anon,authenticated')
         for number in (1,2):
             name=os.environ.get(f'ADMIN{number}_USERNAME');password=os.environ.get(f'ADMIN{number}_PASSWORD')
             if name and password:
@@ -74,6 +80,9 @@ def init_db():
         execute(c,'DELETE FROM sessions WHERE expires_at < %s',(time.time(),))
         execute(c,'DELETE FROM events WHERE created_at < %s',(time.time()-90*86400,))
         execute(c,'DELETE FROM rate_buckets WHERE started_at < %s',(time.time()-86400,))
+if SUPABASE_DATABASE_URL and not TEST_DB:
+    from server.migrate_database import migrate
+    migrate(SOURCE_DATABASE_URL, SUPABASE_DATABASE_URL, DATABASE_SCHEMA, SCHEMA, os.environ.get('BAROMETR_SOURCE_DB_SCHEMA','public'))
 init_db()
 raw=(ROOT/'aplikace/catalog-data.js').read_text()
 CATALOG=json.loads(raw.split(' = ',1)[1].rstrip(';\n'))
@@ -463,11 +472,32 @@ def change_password():
     with db() as c:
         execute(c,'UPDATE users SET password_hash=%s WHERE id=%s',(password_hash(new),g.user['id']));execute(c,'DELETE FROM sessions WHERE user_id=%s AND token_hash<>%s',(g.user['id'],g.user['token_hash']));audit(c,g.user['id'],'password_changed','Změna hesla')
     return jsonify(ok=True)
+@app.route('/api/stock',methods=['GET','PUT'])
+@authenticated()
+def stock_document():
+    from server.stock import validate_stock, StockValidationError
+    if request.method=='GET':
+        with db() as c:row=one(c,'SELECT data_json,revision FROM stock_documents WHERE user_id=%s',(g.user['id'],))
+        return jsonify(data=json.loads(row['data_json']) if row else {'stores':[{'id':'main','name':'Hlavní sklad'}],'products':[],'counts':[],'moves':[],'draft':None},revision=row['revision'] if row else 0)
+    data=body()
+    if type(data.get('revision')) is not int or data['revision']<0:raise ApiError('Neplatná verze skladu.')
+    try:clean=validate_stock(data.get('data'))
+    except StockValidationError as e:raise ApiError(str(e))
+    revision=data['revision']
+    with db() as c:
+        execute(c,'INSERT INTO stock_documents (user_id,revision,data_json,updated_at) VALUES (%s,0,%s,%s) ON CONFLICT (user_id) DO NOTHING',(g.user['id'],json.dumps({'stores':[],'products':[],'counts':[],'moves':[],'draft':None}),time.time()))
+        changed=execute(c,'UPDATE stock_documents SET data_json=%s,revision=revision+1,updated_at=%s WHERE user_id=%s AND revision=%s',(json.dumps(clean,ensure_ascii=False),time.time(),g.user['id'],revision)).rowcount
+        if changed!=1:raise ApiError('Sklad byl změněn na jiném zařízení. Načtěte aktuální stav a změnu zopakujte.',409)
+        audit(c,g.user['id'],'stock_saved','Uložení skladů a inventur')
+    return jsonify(ok=True,revision=revision+1)
+@app.get('/stock.js')
+def stock_script():return send_from_directory(WEB,'stock.js')
+
 @app.get('/healthz')
 def health():
     with db() as c:execute(c,'SELECT 1')
     from server.vision import configuration
-    return jsonify(status='ok',freeUnlocks=FREE_UNLOCKS,automaticLevelEnabled=configuration()['enabled'],shopBundleTemplates=len(SHOP_TEMPLATES))
+    return jsonify(status='ok',version='0.11.0',database='supabase' if SUPABASE_DATABASE_URL else 'postgres',freeUnlocks=FREE_UNLOCKS,automaticLevelEnabled=configuration()['enabled'],shopBundleTemplates=len(SHOP_TEMPLATES))
 @app.get('/')
 def index():return send_from_directory(WEB,'index.html')
 @app.get('/app.js')
