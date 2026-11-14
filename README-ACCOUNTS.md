@@ -24,7 +24,7 @@ Bez BAROMETR_DB_SCHEMA se chování dosavadní databáze nemění. Pokud konfigu
 
 ## Produkční převod do Supabase a skladová evidence
 
-`SUPABASE_DATABASE_URL` je oddělené připojení do Supabase (Session pooler, TLS). Původní `DATABASE_URL` zůstává zdrojem a zálohou; Blueprint ho nepřepisuje. Při prvním startu nové verze server zamkne zápisy původních tabulek, zkopíruje všech deset tabulek do neveřejného schématu `barometr` a ověří počty i SHA-256 otisky všech řádků. Tím zachová ID, scrypt hesla, jména, role, odemčení, stav inventur, fotografie, relace a pozvánky. Až úspěšná transakce zapíše migrační značku, začne aplikace používat Supabase. Další starty migraci neopakují a nepřepisují novější data starou zálohou. Zdrojový zámek se uvolní po 120 sekundách, aby staré instance nemohly přijmout pozdní zápis během přepnutí provozu.
+`SUPABASE_DATABASE_URL` je oddělené připojení do Supabase (Session pooler, TLS). Původní `DATABASE_URL` zůstává zdrojem a zálohou; Blueprint ho nepřepisuje. Při prvním startu nové verze server zamkne zápisy původních tabulek, zkopíruje všech deset původních tabulek i případná nová skladová data do neveřejného schématu `barometr` a ověří počty i SHA-256 otisky všech řádků. Tím zachová ID, scrypt hesla, jména, role, odemčení, stav inventur, fotografie, relace a pozvánky. Až úspěšná transakce zapíše migrační značku, začne aplikace používat Supabase. Další starty migraci neopakují a nepřepisují novější data starou zálohou. Zdrojový zámek se uvolní po 120 sekundách, aby staré instance nemohly přijmout pozdní zápis během přepnutí provozu.
 
 `/healthz` uvádí verzi a aktivní databázový backend bez přihlašovacích údajů. Chyba připojení nebo rozdíl při kontrole migraci zastaví; databáze se nemažou.
 

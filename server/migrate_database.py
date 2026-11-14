@@ -6,7 +6,7 @@ import threading
 import time
 from urllib.parse import urlparse, parse_qs
 
-TABLES = ('users', 'shop_bundles', 'bottle_calibrations', 'scan_photos',
+TABLES = ('users', 'stock_documents', 'shop_bundles', 'bottle_calibrations', 'scan_photos',
           'sessions', 'invitations', 'invitation_uses', 'events', 'unlocks', 'rate_buckets')
 
 def migrate(source_url, target_url, schema, statements, source_schema='public'):
@@ -36,13 +36,17 @@ def migrate(source_url, target_url, schema, statements, source_schema='public'):
                 raise RuntimeError('Original DATABASE_URL is needed for the first migration')
             source = psycopg.connect(source_url, connect_timeout=15, row_factory=dict_row)
             source.execute('SET lock_timeout TO \'60s\'')
-            source.execute(sql.SQL('LOCK TABLE {} IN SHARE ROW EXCLUSIVE MODE').format(sql.SQL(',').join(sql.Identifier(source_schema, t) for t in TABLES)))
+            existing = {r['table_name'] for r in source.execute('SELECT table_name FROM information_schema.tables WHERE table_schema=%s',(source_schema,)).fetchall()}
+            tables = [t for t in TABLES if t in existing]
+            if not (set(TABLES)-{'stock_documents'} <= existing):
+                raise RuntimeError('Original account tables are incomplete; migration stopped')
+            source.execute(sql.SQL('LOCK TABLE {} IN SHARE ROW EXCLUSIVE MODE').format(sql.SQL(',').join(sql.Identifier(source_schema, t) for t in tables)))
             for statement in statements:
                 target.execute(statement)
             if target.execute('SELECT count(*) AS n FROM users').fetchone()['n']:
                 raise RuntimeError('Target already contains accounts; refusing to overwrite profiles')
             summary = {}
-            for table in TABLES:
+            for table in tables:
                 rows = source.execute(sql.SQL('SELECT * FROM {}').format(sql.Identifier(source_schema, table))).fetchall()
                 if rows:
                     columns = list(rows[0])
