@@ -578,6 +578,9 @@ def ocr_asset(name):return send_from_directory(WEB/'ocr',name)
 @app.get('/scale.js')
 def scale_script():return send_from_directory(WEB,'scale.js')
 
+@app.get('/reference.js')
+def reference_script():return send_from_directory(WEB,'reference.js')
+
 @app.get('/stock.js')
 def stock_script():return send_from_directory(WEB,'stock.js')
 
@@ -585,7 +588,7 @@ def stock_script():return send_from_directory(WEB,'stock.js')
 def health():
     with db() as c:execute(c,'SELECT 1')
     from server.vision import configuration
-    return jsonify(status='ok',version='0.12.2',database='supabase' if SUPABASE_DATABASE_URL else 'postgres',freeUnlocks=FREE_UNLOCKS,automaticLevelEnabled=configuration()['enabled'],shopBundleTemplates=len(SHOP_TEMPLATES))
+    return jsonify(status='ok',version='0.13.0',database='supabase' if SUPABASE_DATABASE_URL else 'postgres',freeUnlocks=FREE_UNLOCKS,automaticLevelEnabled=configuration()['enabled'],shopBundleTemplates=len(SHOP_TEMPLATES))
 @app.get('/')
 def index():return send_from_directory(WEB,'index.html')
 @app.get('/app.js')

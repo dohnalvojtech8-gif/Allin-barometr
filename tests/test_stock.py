@@ -36,7 +36,7 @@ def test_stock_rejects_invalid_references_nonfinite_counts_and_duplicate_ids():
   d=payload();mutate(d);rev=a.get('/api/stock').json['revision']
   assert a.put('/api/stock',json={'revision':rev,'data':d},headers=h).status_code==400
  assert a.get('/stock.js').status_code==200
- assert 'stock.js?v=0.12.2' in a.get('/').text
+ assert 'stock.js?v=0.13.0' in a.get('/').text
 
 def test_stock_audit_freezes_expected_values_and_cannot_be_forged():
  a,h=login();d=payload();rev=a.get('/api/stock').json['revision'];r=a.put('/api/stock',json={'revision':rev,'data':d},headers=h);assert r.status_code==200
@@ -94,3 +94,16 @@ def test_removal_of_warehouse_with_open_inventory_is_rejected():
  d['stores'][0]['archivedAt']=datetime.now(timezone.utc).isoformat()
  assert a.put('/api/stock',json={'revision':before['revision'],'data':d},headers=h).status_code==400
  assert a.get('/api/stock').json['revision']==before['revision']
+
+def test_beer_weight_metadata_is_validated_and_preserved():
+ from server.stock import validate_stock,StockValidationError
+ import pytest
+ d=payload();p=d['products'][0]
+ p.update(kind='keg',unit='l',name='Volba sládků',tapName='Testovací ležák',capacity=50,tare=7,fullWeightKg=77,referenceId='')
+ assert validate_stock(d)['products'][0]['fullWeightKg']==77
+ for invalid in (7,6,-1,float('nan'),'77'):
+  p['fullWeightKg']=invalid
+  with pytest.raises(StockValidationError):validate_stock(d)
+ p['fullWeightKg']=77;p['tapName']='x'*151
+ with pytest.raises(StockValidationError):validate_stock(d)
+ assert app.test_client().get('/reference.js').status_code==200

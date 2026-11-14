@@ -31,8 +31,11 @@ def validate_stock(data):
         if not isinstance(p,dict) or not text(p.get('id'),100) or p['id'] in products or not text(p.get('name')) or not text(p.get('category'),80):raise StockValidationError('Neplatný produkt.')
         products.add(p['id'])
         if p.get('store') is not None and p['store'] not in stores:raise StockValidationError('Produkt musí patřit do existujícího skladu.')
-        for optional in ('unitWeightKg','packSize'):
+        for optional in ('unitWeightKg','packSize','fullWeightKg'):
             if optional in p and not number(p[optional]):raise StockValidationError('Neplatná hmotnost kusu nebo velikost balení.')
+        if p.get('fullWeightKg',0)>0 and p['fullWeightKg']<=p.get('tare',0):raise StockValidationError('Plný obal musí vážit více než prázdný.')
+        if not text(p.get('referenceId',''),100,True):raise StockValidationError('Neplatný odkaz na zdroj produktu.')
+        if not text(p.get('tapName',''),150,True):raise StockValidationError('Neplatný název volby sládků.')
         if p.get('kind') not in ('piece','keg','wine','liquid','weight') or p.get('unit') not in ('ks','l','kg','balení'):raise StockValidationError('Neplatná jednotka nebo typ produktu.')
         if not all(number(p.get(k)) for k in ('cost','min','tare','capacity')) or not number(p.get('density'),True):raise StockValidationError('Neplatné množství nebo cena produktu.')
         if p['kind'] in ('keg','wine','liquid') and (p['unit']!='l' or p['capacity']<=0):raise StockValidationError('Sudy a víno vyžadují jednotku l a kladný objem.')
