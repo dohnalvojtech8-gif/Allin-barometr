@@ -26,6 +26,7 @@ def validate_stock(data):
     for s in data['stores']:
         if not isinstance(s,dict) or not text(s.get('id'),100) or s['id'] in stores or not text(s.get('name'),100):raise StockValidationError('Neplatný sklad.')
         stores.add(s['id'])
+        if s.get('archivedAt') is not None and not date(s['archivedAt']):raise StockValidationError('Neplatné datum odstranění skladu.')
     for p in data['products']:
         if not isinstance(p,dict) or not text(p.get('id'),100) or p['id'] in products or not text(p.get('name')) or not text(p.get('category'),80):raise StockValidationError('Neplatný produkt.')
         products.add(p['id'])
@@ -136,3 +137,16 @@ def change_rows(before,after):
             av=a.get('values',{}).get(key);bv=b.get('values',{}).get(key)
             if av!=bv:changes.append({'store':sid,'entity':key,'kind':'rozpracovaná inventura','label':products.get(key,{}).get('name','Položka'),'field':'qty','before':av,'after':bv})
     return changes
+
+def validate_active_changes(before,after):
+    """Removing a warehouse hides it; its historical records remain valid."""
+    archived={s['id'] for s in after['stores'] if s.get('archivedAt')}
+    if after.get('draft') and after['draft']['store'] in archived:
+        raise StockValidationError('Nejprve dokončete nebo zrušte rozpracovanou inventuru skladu.')
+    if any(i.get('store') in archived for i in (after.get('barDraft') or {}).get('items',[])):
+        raise StockValidationError('Nejprve uložte rozpracovanou inventuru baru s položkami tohoto skladu.')
+    for collection in ('products','counts','moves'):
+        old={r['id']:r for r in before.get(collection,[])}
+        for row in after[collection]:
+            if row.get('store') in archived and old.get(row['id'])!=row:
+                raise StockValidationError('Odstraněný sklad nejdříve obnovte; nelze do něj zapisovat nové změny.')

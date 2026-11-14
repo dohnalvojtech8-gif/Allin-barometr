@@ -499,7 +499,7 @@ def write_stock_changes(c,owner,before,after,revision):
 @app.route('/api/stock',methods=['GET','PUT'])
 @authenticated(permission='stock.view')
 def stock_document():
-    from server.stock import validate_stock, StockValidationError, required_permissions, prepare_counts
+    from server.stock import validate_stock, StockValidationError, required_permissions, prepare_counts, validate_active_changes
     owner_id=g.user.get('stock_owner_id') or g.user['id']
     if request.method=='GET':
         with db() as c:row=one(c,'SELECT data_json,revision FROM stock_documents WHERE user_id=%s',(owner_id,))
@@ -517,6 +517,8 @@ def stock_document():
         old=json.loads(row['data_json'])
         for permission in required_permissions(old,clean):
             if not has_permission(g.user,permission):raise ApiError('K této změně nemáte oprávnění: '+PERMISSIONS[permission][0]+'.',403)
+        try:validate_active_changes(old,clean)
+        except StockValidationError as e:raise ApiError(str(e))
         clean=prepare_counts(old,clean)
         changed=execute(c,'UPDATE stock_documents SET data_json=%s,revision=revision+1,updated_at=%s WHERE user_id=%s AND revision=%s',(json.dumps(clean,ensure_ascii=False),time.time(),owner_id,revision)).rowcount
         if changed!=1:raise ApiError('Sklad byl změněn na jiném zařízení. Obnovte stránku.',409)
@@ -583,7 +585,7 @@ def stock_script():return send_from_directory(WEB,'stock.js')
 def health():
     with db() as c:execute(c,'SELECT 1')
     from server.vision import configuration
-    return jsonify(status='ok',version='0.12.0',database='supabase' if SUPABASE_DATABASE_URL else 'postgres',freeUnlocks=FREE_UNLOCKS,automaticLevelEnabled=configuration()['enabled'],shopBundleTemplates=len(SHOP_TEMPLATES))
+    return jsonify(status='ok',version='0.12.1',database='supabase' if SUPABASE_DATABASE_URL else 'postgres',freeUnlocks=FREE_UNLOCKS,automaticLevelEnabled=configuration()['enabled'],shopBundleTemplates=len(SHOP_TEMPLATES))
 @app.get('/')
 def index():return send_from_directory(WEB,'index.html')
 @app.get('/app.js')
