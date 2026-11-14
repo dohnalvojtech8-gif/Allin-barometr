@@ -1,5 +1,5 @@
 """BAROMETR accounts API. PostgreSQL in production; explicit SQLite only for tests."""
-import os, json, time, secrets, hashlib, hmac, re, uuid, sqlite3, unicodedata
+import os, json, time, secrets, hashlib, hmac, re, uuid, sqlite3, unicodedata, logging
 from pathlib import Path
 from contextlib import contextmanager
 from functools import wraps
@@ -8,7 +8,8 @@ from flask import Flask, request, jsonify, g, send_from_directory, make_response
 ROOT=Path(__file__).resolve().parent.parent
 WEB=Path(__file__).resolve().parent/'web'
 SOURCE_DATABASE_URL=os.environ.get('DATABASE_URL')
-SUPABASE_DATABASE_URL=os.environ.get('SUPABASE_DATABASE_URL')
+SUPABASE_DATABASE_URL=os.environ.get('SUPABASE_DATABASE_URL') or os.environ.get('SUPABASE_DB_URL')
+logging.warning('BAROMETR database configuration keys: %s', ','.join(sorted(k for k in os.environ if re.fullmatch(r'[A-Z_][A-Z0-9_]*',k) and ('SUPABASE' in k or 'DATABASE' in k or k.startswith('BAROMETR_DB')))))
 DATABASE_URL=SUPABASE_DATABASE_URL or SOURCE_DATABASE_URL
 TEST_DB=os.environ.get('BAROMETR_TEST_DB')
 DATABASE_SCHEMA='barometr' if SUPABASE_DATABASE_URL else os.environ.get('BAROMETR_DB_SCHEMA','')
