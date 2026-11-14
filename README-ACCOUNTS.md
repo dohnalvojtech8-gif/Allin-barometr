@@ -11,3 +11,13 @@ Hesla: scrypt. Relace: náhodný token, hash v DB, Secure/HttpOnly/SameSite cook
 Testy: `pip install -r requirements.txt pytest` a `pytest -q tests/test_accounts.py`. Browser test vyžaduje Playwright a Chromium; TEST_URL, TEST_ADMIN1, TEST_PASSWORD1, TEST_ADMIN2, TEST_PASSWORD2 nastavte mimo zdrojový kód. SQLite funguje pouze při explicitním BAROMETR_TEST_DB pro testy; v produkci je povinná DATABASE_URL.
 
 Dočasná bezplatná databáze vytvořená 12. 11. 2026 vyprší 12. 12. 2026. Před expirací je nutná migrace nebo změna plánu; nepředstavuje trvalé úložiště. Bezplatný web může po nečinnosti při prvním otevření chvíli startovat.
+
+## Připravené připojení Supabase
+
+Server podporuje `BAROMETR_DB_SCHEMA=barometr` a `DATABASE_URL` z Connect → Session pooler v Supabase. Přesný pooler host je nutné převzít z dashboardu, neodvozovat z regionu. Připojení musí mít `sslmode=require` nebo přísnější ověřování TLS.
+
+Schéma `barometr` a jeho deset tabulek jsou připravené v projektu Supabase pro Barometr. SQL je v `database/supabase-schema.sql`. Schéma není vystavené veřejnému Data API; role anon/authenticated k němu nemají přístup. Účty aplikace zůstávají spravované Flask backendem.
+
+Před změnou produkčního DATABASE_URL je nutné přenést a ověřit existující účty, inventury, fotografie, pozvánky a další záznamy. Připravené tabulky samy o sobě neznamenají přepnutí běžící aplikace. Původní Render databázi neodstraňovat před dokončením migrace a ověřením dat.
+
+Bez BAROMETR_DB_SCHEMA se chování dosavadní databáze nemění. Pokud konfiguraci spravuje Blueprint, jeho DATABASE_URL nyní stále odkazuje na Render databázi přes fromDatabase; při přechodu je nutné upravit i tento zdroj konfigurace, aby další synchronizace nevrátila staré připojení.

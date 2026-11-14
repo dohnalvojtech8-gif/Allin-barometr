@@ -9,6 +9,9 @@ ROOT=Path(__file__).resolve().parent.parent
 WEB=Path(__file__).resolve().parent/'web'
 DATABASE_URL=os.environ.get('DATABASE_URL')
 TEST_DB=os.environ.get('BAROMETR_TEST_DB')
+DATABASE_SCHEMA=os.environ.get('BAROMETR_DB_SCHEMA','')
+if DATABASE_SCHEMA and not re.fullmatch(r'[a-z_][a-z0-9_]{0,62}',DATABASE_SCHEMA):
+    raise RuntimeError('BAROMETR_DB_SCHEMA must be a lowercase PostgreSQL schema name')
 if not DATABASE_URL and not TEST_DB: raise RuntimeError('DATABASE_URL is required')
 SESSION_DAYS=7
 COOKIE='barometr_session'
@@ -21,7 +24,8 @@ def connect():
         c=sqlite3.connect(TEST_DB,timeout=15);c.row_factory=sqlite3.Row;c.execute('PRAGMA foreign_keys=ON');return c
     import psycopg
     from psycopg.rows import dict_row
-    return psycopg.connect(DATABASE_URL,row_factory=dict_row,connect_timeout=10)
+    options={'options':f'-c search_path={DATABASE_SCHEMA}'} if DATABASE_SCHEMA else {}
+    return psycopg.connect(DATABASE_URL,row_factory=dict_row,connect_timeout=10,**options)
 def execute(c,sql,args=()): return c.execute(sql.replace('%s','?') if TEST_DB else sql,args)
 @contextmanager
 def db():
