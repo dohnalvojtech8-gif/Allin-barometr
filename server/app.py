@@ -480,6 +480,19 @@ def auth_script():return send_from_directory(WEB,'auth.js')
 def css():return send_from_directory(WEB,'style.css')
 @app.get('/assets/<path:name>')
 def assets(name):return send_from_directory(ROOT/'aplikace/assets',name)
+@app.get('/manifest.webmanifest')
+def pwa_manifest():return send_from_directory(WEB,'manifest.webmanifest',mimetype='application/manifest+json')
+@app.get('/sw.js')
+def pwa_worker():
+    response=send_from_directory(WEB,'sw.js',mimetype='application/javascript')
+    response.headers['Cache-Control']='no-cache'
+    return response
+@app.get('/pwa.js')
+def pwa_script():return send_from_directory(WEB,'pwa.js')
+@app.get('/pwa.css')
+def pwa_style():return send_from_directory(WEB,'pwa.css')
+@app.get('/icons/<path:name>')
+def pwa_icon(name):return send_from_directory(WEB/'icons',name)
 @app.get('/favicon.ico')
-def favicon():return '',204
+def favicon():return send_from_directory(WEB/'icons','icon-192.png',mimetype='image/png')
 if __name__=='__main__':app.run(host='0.0.0.0',port=int(os.environ.get('PORT','10000')))
