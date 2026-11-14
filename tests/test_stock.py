@@ -36,4 +36,36 @@ def test_stock_rejects_invalid_references_nonfinite_counts_and_duplicate_ids():
   d=payload();mutate(d);rev=a.get('/api/stock').json['revision']
   assert a.put('/api/stock',json={'revision':rev,'data':d},headers=h).status_code==400
  assert a.get('/stock.js').status_code==200
- assert 'stock.js?v=0.11.0' in a.get('/').text
+ assert 'stock.js?v=0.12.0' in a.get('/').text
+
+def test_stock_audit_freezes_expected_values_and_cannot_be_forged():
+ a,h=login();d=payload();rev=a.get('/api/stock').json['revision'];r=a.put('/api/stock',json={'revision':rev,'data':d},headers=h);assert r.status_code==200
+ current=a.get('/api/stock').json;d=current['data'];d['moves'].append({'id':'delivery-audit','product':'pizza','store':'s1','qty':20,'reason':'Příjem','at':datetime.now(timezone.utc).isoformat()})
+ r=a.put('/api/stock',json={'revision':current['revision'],'data':d},headers=h);assert r.status_code==200
+ current=a.get('/api/stock').json;d=current['data'];d['counts'].append({'id':'count-audit-2','inventoryId':'test-inventory-audit','product':'pizza','store':'s1','qty':350,'expected':99999,'at':datetime.now(timezone.utc).isoformat()})
+ r=a.put('/api/stock',json={'revision':current['revision'],'data':d},headers=h);assert r.status_code==200,r.json
+ assert r.json['data']['counts'][-1]['expected']==365
+ changes=a.get('/api/admin/stock-changes?q=Krabice').json['changes']
+ assert any(c['field']=='qty' and c['before']==345 and c['after']==365 for c in changes)
+ assert any(c['field']=='qty' and c['before']==365 and c['after']==350 for c in changes)
+ previous=len(changes);assert a.put('/api/stock',json={'revision':0,'data':d},headers=h).status_code==409
+ assert len(a.get('/api/admin/stock-changes?q=Krabice').json['changes'])==previous
+
+def test_permissions_shared_stock_receiving_and_server_denial():
+ a,h=login();owner=a.get('/api/me').json['user']['id']
+ from tests.test_accounts import invite
+ code=invite(a,h)['code'];u=app.test_client();assert u.post('/api/register',json={'firstName':'Sklad','lastName':'Test','username':'permissions_stock','password':'test-password-safe','inviteCode':code}).status_code==200
+ me=u.get('/api/me').json;uh={'X-CSRF-Token':me['csrf']};pid=me['user']['id']
+ perms={k:False for k in me['user']['permissions']};perms.update({'stock.view':True,'stock.receive':True})
+ assert a.post('/api/admin/users/'+pid+'/permissions',json={'permissions':perms,'stockOwnerId':owner},headers=h).status_code==200
+ shared=u.get('/api/stock').json;assert shared['data']==a.get('/api/stock').json['data']
+ changed=copy.deepcopy(shared['data']);changed['products'][0]['name']='Unauthorized rename'
+ assert u.put('/api/stock',json={'revision':shared['revision'],'data':changed},headers=uh).status_code==403
+ received=copy.deepcopy(shared['data']);received['moves'].append({'id':'authorized-receipt','product':'pizza','store':'s1','qty':4,'reason':'Příjem','at':datetime.now(timezone.utc).isoformat()})
+ r=u.put('/api/stock',json={'revision':shared['revision'],'data':received},headers=uh);assert r.status_code==200,r.json
+ assert a.get('/api/stock').json['data']['moves'][-1]['qty']==4
+ assert u.get('/api/admin/stock-changes').status_code==403
+ assert u.post('/api/admin/users/'+owner+'/permissions',json={'permissions':perms},headers=uh).status_code==403
+ assert u.post('/api/unlocks',json={'productId':'amundsen'},headers=uh).status_code==403
+ assert a.post('/api/admin/users/'+owner+'/permissions',json={'permissions':perms},headers=h).status_code==403
+ assert u.put('/api/state',json={'rows':[],'records':[],'inventoryPlan':{'entries':[]}},headers=uh).status_code==403

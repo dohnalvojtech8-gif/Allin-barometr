@@ -6,7 +6,7 @@ import threading
 import time
 from urllib.parse import urlparse, parse_qs
 
-TABLES = ('users', 'stock_documents', 'shop_bundles', 'bottle_calibrations', 'scan_photos',
+TABLES = ('users', 'stock_documents', 'stock_change_log', 'shop_bundles', 'bottle_calibrations', 'scan_photos',
           'sessions', 'invitations', 'invitation_uses', 'events', 'unlocks', 'rate_buckets')
 
 def migrate(source_url, target_url, schema, statements, source_schema='public'):
@@ -38,11 +38,13 @@ def migrate(source_url, target_url, schema, statements, source_schema='public'):
             source.execute('SET lock_timeout TO \'60s\'')
             existing = {r['table_name'] for r in source.execute('SELECT table_name FROM information_schema.tables WHERE table_schema=%s',(source_schema,)).fetchall()}
             tables = [t for t in TABLES if t in existing]
-            if not (set(TABLES)-{'stock_documents'} <= existing):
+            if not (set(TABLES)-{'stock_documents','stock_change_log'} <= existing):
                 raise RuntimeError('Original account tables are incomplete; migration stopped')
             source.execute(sql.SQL('LOCK TABLE {} IN SHARE ROW EXCLUSIVE MODE').format(sql.SQL(',').join(sql.Identifier(source_schema, t) for t in tables)))
             for statement in statements:
                 target.execute(statement)
+            target.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions_json TEXT NOT NULL DEFAULT '{}'")
+            target.execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS stock_owner_id TEXT REFERENCES users(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED')
             if target.execute('SELECT count(*) AS n FROM users').fetchone()['n']:
                 raise RuntimeError('Target already contains accounts; refusing to overwrite profiles')
             summary = {}
@@ -57,7 +59,7 @@ def migrate(source_url, target_url, schema, statements, source_schema='public'):
                 def fingerprint(values):
                     canonical = sorted(json.dumps(dict(r), sort_keys=True, ensure_ascii=False, separators=(',', ':')) for r in values)
                     return hashlib.sha256('\n'.join(canonical).encode()).hexdigest()
-                if len(copied) != len(rows) or fingerprint(copied) != fingerprint(rows):
+                if len(copied) != len(rows) or fingerprint([{k:r[k] for k in rows[0]} for r in copied] if rows else copied) != fingerprint(rows):
                     raise RuntimeError('Migration verification failed for '+table)
                 target.execute(sql.SQL('ALTER TABLE {} ENABLE ROW LEVEL SECURITY').format(sql.Identifier(table)))
                 summary[table] = len(rows)

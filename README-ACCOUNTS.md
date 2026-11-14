@@ -29,3 +29,15 @@ Bez BAROMETR_DB_SCHEMA se chování dosavadní databáze nemění. Pokud konfigu
 `/healthz` uvádí verzi a aktivní databázový backend bez přihlašovacích údajů. Chyba připojení nebo rozdíl při kontrole migraci zastaví; databáze se nemažou.
 
 Nová tabulka `stock_documents` uchovává sklady, vlastní produkty, uzavřené a rozpracované inventury, pohyby a měsíční porovnání odděleně pro každý účet. `/api/stock` vyžaduje přihlášení a CSRF. Optimistická revize brání přepsání novějších dat jiným zařízením. Schéma není přístupné rolím anon/authenticated.
+
+## Verze 0.12 — inventury, sklady a kontrola majitele
+
+Mobilní navigace používá vysouvací boční panel. Produkty vznikají v konkrétním skladu; příjem celé dodávky má společné ID a vyžaduje jedno potvrzení. Inventurní rekapitulace rozlišuje účetní/evidovaný stav od zjištěného. Očekávané množství a nákupní cena se do uzavřeného skladového záznamu otisknou na serveru. První inventura bez výchozí evidence není označována jako schodek. Nevyplněná cena se nezaměňuje za nulové manko.
+
+`stock_change_log` zaznamenává úpravy atomicky s jejich uložením, včetně aktéra, skladu a hodnot před/po. Původní změny před zavedením logu nelze zpětně rekonstruovat. Historie není měnitelná klientem a zůstává zachována i po odstranění účtu. Administrátoři ji otevřou v Nastavení; delegovaný čtenář pouze pro svůj přidělený pracovní prostor.
+
+Majitel může jednotlivým uživatelům přidělovat serverem ověřovaná oprávnění a přístup ke svým skladům pomocí `stock_owner_id`. Výchozí vlastní pracovní prostory a osobní profily se nepřepisují. Role majitele se tímto formulářem nemění. Oprávnění jsou čtena z databáze při každém požadavku.
+
+Nastavení inventury uchovává pořadí fyzických lahví a volitelnou nákupní cenu. Po dokončení sekvence se otevře celkový přehled s potvrzením, který může zahrnout také více zvážených sudů stejného produktu. Průběžná jednotlivá měření zůstávají uložená pro obnovu po výpadku; závěrečné potvrzení vytváří uzavřenou inventuru baru.
+
+OCR displeje používá připnuté lokálně hostované Tesseract.js 6.0.1, Core 6.0.0 a tessdata_fast 4.1.0. Fotografie neopouští prohlížeč. Uživatel vybere rozpoznané číslo, zkontroluje jednotku a potvrdí výsledek po odečtení obalu. Čtení není garantované pro každý typ displeje; dostupné je označení výřezu i ruční oprava. Pro litry je potřeba skutečná hustota a hmotnost obalu, pro kusy hmotnost kusu. Tato funkce se neopírá o externí placené API ani neaktivuje nepřipojené AI měření hladiny.

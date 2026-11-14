@@ -52,8 +52,10 @@ def password_ok(value,hashed):
     except (ValueError,TypeError):return False
 DUMMY=password_hash(secrets.token_urlsafe(24))
 SCHEMA=[
-'''CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT NOT NULL, username_key TEXT UNIQUE NOT NULL, first_name TEXT NOT NULL, last_name TEXT NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin','user')), status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','suspended')), created_at DOUBLE PRECISION NOT NULL, last_login DOUBLE PRECISION, last_seen DOUBLE PRECISION, login_count INTEGER NOT NULL DEFAULT 0, state_json TEXT NOT NULL DEFAULT '{}')''',
+'''CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT NOT NULL, username_key TEXT UNIQUE NOT NULL, first_name TEXT NOT NULL, last_name TEXT NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin','user')), status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','suspended')), created_at DOUBLE PRECISION NOT NULL, last_login DOUBLE PRECISION, last_seen DOUBLE PRECISION, login_count INTEGER NOT NULL DEFAULT 0, state_json TEXT NOT NULL DEFAULT '{}', permissions_json TEXT NOT NULL DEFAULT '{}',stock_owner_id TEXT REFERENCES users(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED)''',
 '''CREATE TABLE IF NOT EXISTS stock_documents (user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,revision INTEGER NOT NULL DEFAULT 0,data_json TEXT NOT NULL,updated_at DOUBLE PRECISION NOT NULL)''',
+'''CREATE TABLE IF NOT EXISTS stock_change_log (id TEXT PRIMARY KEY,owner_id TEXT REFERENCES users(id) ON DELETE SET NULL,actor_id TEXT REFERENCES users(id) ON DELETE SET NULL,actor_name TEXT NOT NULL,store_id TEXT NOT NULL,store_name TEXT NOT NULL,entity_id TEXT NOT NULL,kind TEXT NOT NULL,label TEXT NOT NULL,field TEXT NOT NULL,before_json TEXT NOT NULL,after_json TEXT NOT NULL,revision INTEGER NOT NULL,created_at DOUBLE PRECISION NOT NULL)''',
+'CREATE INDEX IF NOT EXISTS stock_changes_time ON stock_change_log(created_at)',
 '''CREATE TABLE IF NOT EXISTS shop_bundles (id TEXT PRIMARY KEY,kind TEXT NOT NULL,template_json TEXT NOT NULL,created_at DOUBLE PRECISION NOT NULL)''',
 '''CREATE TABLE IF NOT EXISTS bottle_calibrations (user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,product_id TEXT NOT NULL,capacity INTEGER NOT NULL,points_json TEXT NOT NULL,updated_at DOUBLE PRECISION NOT NULL,PRIMARY KEY(user_id,product_id,capacity))''',
 '''CREATE TABLE IF NOT EXISTS scan_photos (id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,jpeg TEXT NOT NULL,created_at DOUBLE PRECISION NOT NULL)''',
@@ -71,8 +73,13 @@ def audit(c,user_id,action,detail=''):
 def init_db():
     with db() as c:
         for sql in SCHEMA:execute(c,sql)
+        columns={r['name'] for r in allrows(c,'PRAGMA table_info(users)')} if TEST_DB else {r['column_name'] for r in allrows(c,"SELECT column_name FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='users'")}
+        if 'permissions_json' not in columns:execute(c,"ALTER TABLE users ADD COLUMN permissions_json TEXT NOT NULL DEFAULT '{}'")
+        if 'stock_owner_id' not in columns:execute(c,'ALTER TABLE users ADD COLUMN stock_owner_id TEXT REFERENCES users(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED')
         if SUPABASE_DATABASE_URL and not TEST_DB:
             execute(c,'ALTER TABLE stock_documents ENABLE ROW LEVEL SECURITY')
+            execute(c,'ALTER TABLE stock_change_log ENABLE ROW LEVEL SECURITY')
+            execute(c,'REVOKE ALL ON stock_change_log FROM PUBLIC,anon,authenticated')
             execute(c,'REVOKE ALL ON stock_documents FROM PUBLIC,anon,authenticated')
         for number in (1,2):
             name=os.environ.get(f'ADMIN{number}_USERNAME');password=os.environ.get(f'ADMIN{number}_PASSWORD')
@@ -138,7 +145,7 @@ def protect_origin():
 @app.after_request
 def headers(response):
     response.headers['X-Content-Type-Options']='nosniff';response.headers['X-Frame-Options']='DENY';response.headers['Referrer-Policy']='strict-origin-when-cross-origin'
-    response.headers['Content-Security-Policy']="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self'; media-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    response.headers['Content-Security-Policy']="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self'; media-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
     if request.path.startswith('/api/') or request.path=='/':response.headers['Cache-Control']='no-store'
     return response
 
@@ -152,7 +159,9 @@ def textfield(data,key,minimum=1,maximum=64):
     v=unicodedata.normalize('NFKC',v).strip()
     if len(v)<minimum or len(v)>maximum or any(ord(x)<32 for x in v):raise ApiError('Zkontrolujte délku a obsah polí.')
     return v
-def authenticated(admin=False,bottles=False):
+from server.permissions import has_permission, effective_permissions, PERMISSIONS
+
+def authenticated(admin=False,bottles=False,permission=None):
     def decorator(fn):
         @wraps(fn)
         def wrapped(*args,**kwargs):
@@ -160,7 +169,9 @@ def authenticated(admin=False,bottles=False):
             with db() as c:
                 row=one(c,"SELECT u.*,s.csrf,s.token_hash FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=%s AND s.expires_at>%s AND u.status='active'",(digest(token),time.time()))
                 if not row:raise ApiError('Přihlaste se prosím.',401)
+                if permission and not has_permission(row,permission):raise ApiError('K této akci nemáte oprávnění.',403)
                 if admin and row['role']!='admin':raise ApiError('Tato akce je dostupná pouze administrátorům.',403)
+                if bottles and permission!='catalog.unlock' and not has_permission(row,'inventory.run'):raise ApiError('Nemáte oprávnění provádět inventury.',403)
                 if bottles and not (FREE_UNLOCKS or row['role']=='admin'):raise ApiError('Odemykání a práce s lahvemi je pro běžné účty zatím vypnutá.',403)
                 if request.method in ('POST','PUT','PATCH','DELETE') and not hmac.compare_digest(request.headers.get('X-CSRF-Token',''),row['csrf']):raise ApiError('Obnovte stránku a zkuste to znovu.',403)
                 if not row['last_seen'] or time.time()-row['last_seen']>45:execute(c,'UPDATE users SET last_seen=%s WHERE id=%s',(time.time(),row['id']))
@@ -169,7 +180,7 @@ def authenticated(admin=False,bottles=False):
         return wrapped
     return decorator
 
-def public_user(u):return {k:u[k] for k in ('id','username','first_name','last_name','role','status','created_at','last_login','last_seen','login_count')}
+def public_user(u):return {**{k:u[k] for k in ('id','username','first_name','last_name','role','status','created_at','last_login','last_seen','login_count')},'permissions':effective_permissions(u),'stockOwnerId':u.get('stock_owner_id')}
 def rate_limit(keys,max_attempts=8,window=900):
     now=time.time()
     with db() as c:
@@ -237,8 +248,9 @@ def shop_offers():
     current['offers']=[quote(t,PRODUCTS,owned) for t in current['offers']]
     return jsonify(**current,templateCount=len(SHOP_TEMPLATES),paymentsEnabled=False,freeUnlocks=FREE_UNLOCKS,adminFree=g.user['role']=='admin')
 @app.post('/api/shop/bundles/<bundle_id>/unlock')
-@authenticated(bottles=True)
+@authenticated(bottles=True,permission='catalog.unlock')
 def unlock_bundle(bundle_id):
+    if not has_permission(g.user,'catalog.unlock'):raise ApiError('Nemáte oprávnění odemykat nápoje.',403)
     data=body();current=choose_week(SHOP_TEMPLATES)
     if data.get('weekKey')!=current['weekKey']:raise ApiError('Nabídka se změnila. Načtěte aktuální balíčky.',409)
     template=next((t for t in current['offers'] if t['id']==bundle_id),None)
@@ -250,8 +262,9 @@ def unlock_bundle(bundle_id):
         if added:audit(c,g.user['id'],'bundle_unlocked',template['title'])
     return jsonify(ok=True,productIds=template['productIds'],addedCount=added,paidCents=0,currency='EUR')
 @app.post('/api/unlocks')
-@authenticated(bottles=True)
+@authenticated(bottles=True,permission='catalog.unlock')
 def unlock():
+    if not has_permission(g.user,'catalog.unlock'):raise ApiError('Nemáte oprávnění odemykat nápoje.',403)
     id=body().get('productId')
     if id not in PRODUCTS:raise ApiError('Produkt neexistuje.',404)
     with db() as c:
@@ -352,6 +365,8 @@ def get_scan_photo(photo_id):
 @authenticated()
 def put_state():
     data=body();clean={}
+    old_state=json.loads(g.user['state_json'])
+    if not has_permission(g.user,'inventory.run') and any(data.get(k,old_state.get(k))!=old_state.get(k) for k in ('rows','records','inventoryPlan')):raise ApiError('Nemáte oprávnění provádět inventury.',403)
     for key in ('cycle','closing'):
         if key in data:clean[key]=data[key]
     if clean.get('cycle','Měsíční') not in ('Denní','Týdenní','Měsíční'):raise ApiError('Neplatný cyklus.')
@@ -384,6 +399,7 @@ def put_state():
             if entry.get('productId') not in ids or entry.get('capacity') not in [v['ml'] for v in PRODUCTS[entry['productId']]['variants']]:raise ApiError('Neplatný produkt nebo objem v plánu.')
             if not isinstance(entry.get('label',''),str) or len(entry.get('label',''))>80:raise ApiError('Neplatný název v plánu.')
             if entry.get('status','pending') not in ('pending','done','skipped'):raise ApiError('Neplatný stav plánu.')
+            if type(entry.get('purchasePrice',0)) not in (int,float) or not 0<=entry.get('purchasePrice',0)<=1000000:raise ApiError('Neplatná nákupní cena lahve.')
             if entry.get('rowId') and entry['rowId'] not in seen:raise ApiError('Lahev plánu není v inventuře.')
         clean.update(rows=rows,records=records)
     else:clean.update(rows=[],records=[])
@@ -405,15 +421,16 @@ def activity():
             if not last or time.time()-last['created_at']>20:audit(c,g.user['id'],'view_'+action,labels[action])
     return jsonify(ok=True)
 @app.get('/api/admin/users')
-@authenticated(admin=True)
+@authenticated(permission='users.manage')
 def users_list():
     with db() as c:
-        users=allrows(c,'SELECT id,username,first_name,last_name,role,status,created_at,last_login,last_seen,login_count FROM users ORDER BY created_at DESC')
+        users=allrows(c,'SELECT id,username,first_name,last_name,role,status,created_at,last_login,last_seen,login_count,permissions_json,stock_owner_id FROM users ORDER BY created_at DESC')
         counts={r['user_id']:r['n'] for r in allrows(c,'SELECT user_id,COUNT(*) AS n FROM events WHERE created_at>%s GROUP BY user_id',(time.time()-7*86400,))}
-        for u in users:u['activity7d']=counts.get(u['id'],0)
+        for u in users:
+            u['activity7d']=counts.get(u['id'],0);u['permissions']=effective_permissions(u);u['stockOwnerId']=u.pop('stock_owner_id',None);u.pop('permissions_json',None)
     return jsonify(users=users)
 @app.get('/api/admin/users/<id>')
-@authenticated(admin=True)
+@authenticated(permission='users.manage')
 def user_detail(id):
     limit=min(max(request.args.get('limit',100,type=int),1),200);offset=max(request.args.get('offset',0,type=int),0)
     with db() as c:
@@ -424,7 +441,7 @@ def user_detail(id):
         sessions=one(c,'SELECT COUNT(*) AS n FROM sessions WHERE user_id=%s AND expires_at>%s',(id,time.time()))['n']
     return jsonify(user=public_user(u),events=events,total=total,activeSessions=sessions)
 @app.post('/api/admin/invites')
-@authenticated(admin=True)
+@authenticated(permission='users.manage')
 def invite_create():
     data=body();label=str(data.get('label','Pozvánka'))[:80].strip() or 'Pozvánka';days=data.get('days',7);uses=data.get('maxUses',1)
     if type(days) is not int or not 1<=days<=30 or type(uses) is not int or not 1<=uses<=50:raise ApiError('Platnost 1–30 dní, počet použití 1–50.')
@@ -433,16 +450,16 @@ def invite_create():
         execute(c,'INSERT INTO invitations (id,code_hash,label,created_by,created_at,expires_at,max_uses) VALUES (%s,%s,%s,%s,%s,%s,%s)',(id,digest(code),label,g.user['id'],now,now+days*86400,uses));audit(c,g.user['id'],'invite_created','Vygenerování registrační pozvánky')
     return jsonify(id=id,code=code,expiresAt=now+days*86400,maxUses=uses)
 @app.get('/api/admin/invites')
-@authenticated(admin=True)
+@authenticated(permission='users.manage')
 def invite_list():
     with db() as c:return jsonify(invites=allrows(c,'SELECT i.id,i.label,i.created_at,i.expires_at,i.max_uses,i.used_count,i.revoked,u.username AS creator FROM invitations i LEFT JOIN users u ON i.created_by=u.id ORDER BY i.created_at DESC LIMIT 100'))
 @app.post('/api/admin/invites/<id>/revoke')
-@authenticated(admin=True)
+@authenticated(permission='users.manage')
 def invite_revoke(id):
     with db() as c:execute(c,'UPDATE invitations SET revoked=1 WHERE id=%s',(id,));audit(c,g.user['id'],'invite_revoked','Zrušení pozvánky')
     return jsonify(ok=True)
 @app.post('/api/admin/users/<id>/status')
-@authenticated(admin=True)
+@authenticated(permission='users.manage')
 def user_status(id):
     status=body().get('status')
     if status not in ('active','suspended'):raise ApiError('Neplatný stav.')
@@ -453,7 +470,7 @@ def user_status(id):
         execute(c,'UPDATE users SET status=%s WHERE id=%s',(status,id));execute(c,'DELETE FROM sessions WHERE user_id=%s',(id,));audit(c,g.user['id'],'user_status_changed',('Zablokování' if status=='suspended' else 'Obnovení')+' účtu '+target['username'])
     return jsonify(ok=True)
 @app.delete('/api/admin/users/<id>')
-@authenticated(admin=True)
+@authenticated(permission='users.manage')
 def user_delete(id):
     confirmation=body().get('confirmation')
     with db() as c:
@@ -473,24 +490,92 @@ def change_password():
     with db() as c:
         execute(c,'UPDATE users SET password_hash=%s WHERE id=%s',(password_hash(new),g.user['id']));execute(c,'DELETE FROM sessions WHERE user_id=%s AND token_hash<>%s',(g.user['id'],g.user['token_hash']));audit(c,g.user['id'],'password_changed','Změna hesla')
     return jsonify(ok=True)
+def write_stock_changes(c,owner,before,after,revision):
+    from server.stock import change_rows
+    stores={r['id']:r['name'] for r in before.get('stores',[])+after['stores']}
+    for r in change_rows(before,after):
+        execute(c,'INSERT INTO stock_change_log (id,owner_id,actor_id,actor_name,store_id,store_name,entity_id,kind,label,field,before_json,after_json,revision,created_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',(uid(),owner,g.user['id'],g.user['username'],r['store'],stores.get(r['store'],''),r['entity'],r['kind'],r['label'],r['field'],json.dumps(r['before'],ensure_ascii=False),json.dumps(r['after'],ensure_ascii=False),revision,time.time()))
+
 @app.route('/api/stock',methods=['GET','PUT'])
-@authenticated()
+@authenticated(permission='stock.view')
 def stock_document():
-    from server.stock import validate_stock, StockValidationError
+    from server.stock import validate_stock, StockValidationError, required_permissions, prepare_counts
+    owner_id=g.user.get('stock_owner_id') or g.user['id']
     if request.method=='GET':
-        with db() as c:row=one(c,'SELECT data_json,revision FROM stock_documents WHERE user_id=%s',(g.user['id'],))
-        return jsonify(data=json.loads(row['data_json']) if row else {'stores':[{'id':'main','name':'Hlavní sklad'}],'products':[],'counts':[],'moves':[],'draft':None},revision=row['revision'] if row else 0)
+        with db() as c:row=one(c,'SELECT data_json,revision FROM stock_documents WHERE user_id=%s',(owner_id,))
+        return jsonify(data=json.loads(row['data_json']) if row else {'stores':[{'id':'main','name':'Hlavní sklad'}],'products':[],'counts':[],'moves':[],'draft':None,'barInventories':[]},revision=row['revision'] if row else 0)
     data=body()
     if type(data.get('revision')) is not int or data['revision']<0:raise ApiError('Neplatná verze skladu.')
     try:clean=validate_stock(data.get('data'))
-    except StockValidationError as e:raise ApiError(str(e))
+    except (StockValidationError,TypeError,KeyError) as e:raise ApiError(str(e) if isinstance(e,StockValidationError) else 'Neplatná skladová data.')
     revision=data['revision']
     with db() as c:
-        execute(c,'INSERT INTO stock_documents (user_id,revision,data_json,updated_at) VALUES (%s,0,%s,%s) ON CONFLICT (user_id) DO NOTHING',(g.user['id'],json.dumps({'stores':[],'products':[],'counts':[],'moves':[],'draft':None}),time.time()))
-        changed=execute(c,'UPDATE stock_documents SET data_json=%s,revision=revision+1,updated_at=%s WHERE user_id=%s AND revision=%s',(json.dumps(clean,ensure_ascii=False),time.time(),g.user['id'],revision)).rowcount
-        if changed!=1:raise ApiError('Sklad byl změněn na jiném zařízení. Načtěte aktuální stav a změnu zopakujte.',409)
+        empty={'stores':[],'products':[],'counts':[],'moves':[],'draft':None,'barInventories':[]}
+        execute(c,'INSERT INTO stock_documents (user_id,revision,data_json,updated_at) VALUES (%s,0,%s,%s) ON CONFLICT (user_id) DO NOTHING',(owner_id,json.dumps(empty),time.time()))
+        row=one(c,'SELECT data_json,revision FROM stock_documents WHERE user_id=%s',(owner_id,))
+        if row['revision']!=revision:raise ApiError('Sklad byl změněn na jiném zařízení. Načtěte aktuální stav a změnu zopakujte.',409)
+        old=json.loads(row['data_json'])
+        for permission in required_permissions(old,clean):
+            if not has_permission(g.user,permission):raise ApiError('K této změně nemáte oprávnění: '+PERMISSIONS[permission][0]+'.',403)
+        clean=prepare_counts(old,clean)
+        changed=execute(c,'UPDATE stock_documents SET data_json=%s,revision=revision+1,updated_at=%s WHERE user_id=%s AND revision=%s',(json.dumps(clean,ensure_ascii=False),time.time(),owner_id,revision)).rowcount
+        if changed!=1:raise ApiError('Sklad byl změněn na jiném zařízení. Obnovte stránku.',409)
+        write_stock_changes(c,owner_id,old,clean,revision+1)
         audit(c,g.user['id'],'stock_saved','Uložení skladů a inventur')
-    return jsonify(ok=True,revision=revision+1)
+    return jsonify(ok=True,revision=revision+1,data=clean)
+
+@app.get('/api/admin/stock-changes')
+@authenticated(permission='stock.audit')
+def stock_changes():
+    limit=100;offset=max(0,request.args.get('offset',0,type=int));conditions=[];args=[]
+    if g.user['role']!='admin':conditions.append('owner_id=%s');args.append(g.user.get('stock_owner_id') or g.user['id'])
+    for param,column in [('store','store_id'),('owner','owner_id'),('kind','kind')]:
+        value=request.args.get(param,'')
+        if value:conditions.append(column+'=%s');args.append(value)
+    for param,operator in [('from','>='),('to','<=')]:
+        value=request.args.get(param,'')
+        if value:
+            try:
+                from datetime import datetime,timezone
+                stamp=datetime.fromisoformat(value).replace(tzinfo=timezone.utc).timestamp()+(86399.999 if param=='to' else 0)
+            except ValueError:raise ApiError('Neplatné datum.')
+            conditions.append('created_at'+operator+'%s');args.append(stamp)
+    query=request.args.get('q','').strip()
+    if query:conditions.append('(LOWER(label) LIKE %s OR LOWER(actor_name) LIKE %s)');args.extend(['%'+query.lower()+'%']*2)
+    where=' WHERE '+' AND '.join(conditions) if conditions else ''
+    with db() as c:
+        total=one(c,'SELECT count(*) AS n FROM stock_change_log'+where,tuple(args))['n']
+        rows=allrows(c,'SELECT * FROM stock_change_log'+where+' ORDER BY created_at DESC,id DESC LIMIT %s OFFSET %s',tuple(args+[limit,offset]))
+        stores=allrows(c,"SELECT DISTINCT store_id,store_name FROM stock_change_log WHERE store_id<>'' ORDER BY store_name")
+    for row in rows:row['before']=json.loads(row.pop('before_json'));row['after']=json.loads(row.pop('after_json'))
+    return jsonify(changes=rows,total=total,offset=offset,limit=limit,stores=stores)
+
+@app.post('/api/admin/users/<id>/permissions')
+@authenticated(admin=True)
+def user_permissions(id):
+    input_data=body();permissions=input_data.get('permissions')
+    if not isinstance(permissions,dict) or set(permissions)-set(PERMISSIONS) or any(type(v) is not bool for v in permissions.values()):raise ApiError('Neplatná oprávnění.')
+    with db() as c:
+        target=one(c,'SELECT * FROM users WHERE id=%s',(id,))
+        if not target:raise ApiError('Účet neexistuje.',404)
+        if target['role']=='admin':raise ApiError('Oprávnění majitele nelze omezit.',403)
+        previous=effective_permissions(target)
+        owner_id=input_data.get('stockOwnerId',target.get('stock_owner_id')) or None
+        if owner_id is not None:
+            owner=one(c,"SELECT id FROM users WHERE id=%s AND role='admin'",(owner_id,))
+            if not owner:raise ApiError('Pracovní prostor musí patřit existujícímu majiteli.')
+        execute(c,'UPDATE users SET permissions_json=%s,stock_owner_id=%s WHERE id=%s',(json.dumps(permissions),owner_id,id))
+        execute(c,'INSERT INTO stock_change_log (id,owner_id,actor_id,actor_name,store_id,store_name,entity_id,kind,label,field,before_json,after_json,revision,created_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,0,%s)',(uid(),id,g.user['id'],g.user['username'],'','',id,'oprávnění',target['username'],'permissions',json.dumps(previous),json.dumps(permissions),time.time()))
+        if owner_id!=target.get('stock_owner_id'):audit(c,g.user['id'],'workspace_changed','Změna přístupu ke skladům účtu '+target['username'])
+        audit(c,g.user['id'],'permissions_changed','Změna oprávnění účtu '+target['username'])
+    return jsonify(ok=True)
+
+@app.get('/ocr/<path:name>')
+def ocr_asset(name):return send_from_directory(WEB/'ocr',name)
+
+@app.get('/scale.js')
+def scale_script():return send_from_directory(WEB,'scale.js')
+
 @app.get('/stock.js')
 def stock_script():return send_from_directory(WEB,'stock.js')
 
@@ -498,7 +583,7 @@ def stock_script():return send_from_directory(WEB,'stock.js')
 def health():
     with db() as c:execute(c,'SELECT 1')
     from server.vision import configuration
-    return jsonify(status='ok',version='0.11.0',database='supabase' if SUPABASE_DATABASE_URL else 'postgres',freeUnlocks=FREE_UNLOCKS,automaticLevelEnabled=configuration()['enabled'],shopBundleTemplates=len(SHOP_TEMPLATES))
+    return jsonify(status='ok',version='0.12.0',database='supabase' if SUPABASE_DATABASE_URL else 'postgres',freeUnlocks=FREE_UNLOCKS,automaticLevelEnabled=configuration()['enabled'],shopBundleTemplates=len(SHOP_TEMPLATES))
 @app.get('/')
 def index():return send_from_directory(WEB,'index.html')
 @app.get('/app.js')
