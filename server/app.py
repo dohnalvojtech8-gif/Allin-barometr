@@ -663,7 +663,7 @@ def favicon():return send_from_directory(WEB/'icons','icon-192.png',mimetype='im
 from server.work import register as register_work
 register_work(app)
 
-if __name__=='__main__':app.run(host='0.0.0.0',port=int(os.environ.get('PORT','10000')))
+
 
 
 @app.get('/premium/')
@@ -677,3 +677,5 @@ def premium_preview_asset(name):
 @app.get('/premium-theme.css')
 def premium_theme():
     return send_from_directory(WEB,'premium-theme.css')
+
+if __name__=='__main__':app.run(host='0.0.0.0',port=int(os.environ.get('PORT','10000')))
