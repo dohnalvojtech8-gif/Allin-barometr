@@ -673,3 +673,7 @@ def premium_preview():
 @app.get('/premium/<path:name>')
 def premium_preview_asset(name):
     return send_from_directory(WEB/'premium',name)
+
+@app.get('/premium-theme.css')
+def premium_theme():
+    return send_from_directory(WEB,'premium-theme.css')

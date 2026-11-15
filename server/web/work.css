@@ -4,3 +4,6 @@
 @media(orientation:landscape) and (max-height:700px){.pin-gate{padding:20px 35px;gap:35px}.pin-brand{margin-bottom:22px}.pin-intro h1{font-size:36px}.pin-intro p{font-size:17px}.pin-boxes span{height:65px}.pin-keypad{gap:9px}.pin-keypad button{min-height:54px;font-size:27px}.pin-message{min-height:24px;margin:8px 0}.gate-tools{margin-top:16px}}
 
 .pin-keypad .primary{white-space:nowrap;padding:12px;font-size:20px}
+
+/* Private Reserve terminal */
+:root{--bg:#172e29;--panel:#203d32;--line:#45614e;--lime:#d8c99b;--text:#fffefa;--muted:#c5d2be}body{background:#172e29}.pin-entry{background:#1f3b30;padding:24px;border:1px solid #46624c;border-radius:24px;box-shadow:0 20px 60px #0a201c40}.pin-boxes span{background:#142b23;border-color:#66805d;color:#e6d5a3}.pin-keypad button{background:#2c4c3c;border-color:#58704c;color:#fffefa}.pin-keypad .primary{background:#d8c99b;color:#172e29}.work-header{background:#172e29f5}.pin-brand{color:#d8c99b}@media(max-width:760px){.pin-entry{padding:20px 16px}.pin-gate{background:#172e29;padding:18px}.pin-keypad button{background:#2c4c3c}.pin-boxes span{background:#142b23}}
