@@ -37,3 +37,5 @@ Na Renderu běží `barometr-app` podle `render-auth.yaml`. Původní statický 
 - [AI analýza: konfigurace a stav ověření](dokumentace/AUTOMATICKE-ROZPOZNANI.md)
 - [Přidávání lahví](dokumentace/PRIDAVANI-LAHVI.md)
 - [Zdroje původních fotografií](dokumentace/ZDROJE-OBRAZKU.md)
+
+- [Pracovní terminál: PINy, sklady a sdílený tablet](dokumentace/PRACOVNI-REZIM.md)

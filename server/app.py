@@ -70,6 +70,9 @@ SCHEMA=[
 'CREATE INDEX IF NOT EXISTS users_last_seen ON users(last_seen)']
 def audit(c,user_id,action,detail=''):
     execute(c,'INSERT INTO events (id,user_id,action,detail,created_at) VALUES (%s,%s,%s,%s,%s)',(uid(),user_id,action,detail[:240],time.time()))
+from server.work import TABLES as WORK_TABLES,store_scope,scoped_stock,merge_scoped_stock
+SCHEMA.extend(WORK_TABLES)
+
 def init_db():
     with db() as c:
         for sql in SCHEMA:execute(c,sql)
@@ -77,6 +80,9 @@ def init_db():
         if 'permissions_json' not in columns:execute(c,"ALTER TABLE users ADD COLUMN permissions_json TEXT NOT NULL DEFAULT '{}'")
         if 'stock_owner_id' not in columns:execute(c,'ALTER TABLE users ADD COLUMN stock_owner_id TEXT REFERENCES users(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED')
         if SUPABASE_DATABASE_URL and not TEST_DB:
+            for table in ('work_access','work_devices','work_sessions'):
+                execute(c,'ALTER TABLE '+table+' ENABLE ROW LEVEL SECURITY')
+                execute(c,'REVOKE ALL ON '+table+' FROM PUBLIC,anon,authenticated')
             execute(c,'ALTER TABLE stock_documents ENABLE ROW LEVEL SECURITY')
             execute(c,'ALTER TABLE stock_change_log ENABLE ROW LEVEL SECURITY')
             execute(c,'REVOKE ALL ON stock_change_log FROM PUBLIC,anon,authenticated')
@@ -130,6 +136,7 @@ def cleanup_expired():
         with db() as c:
             execute(c,'DELETE FROM events WHERE created_at < %s',(now-90*86400,))
             execute(c,'DELETE FROM sessions WHERE expires_at < %s',(now,))
+            execute(c,'DELETE FROM work_sessions WHERE last_activity < %s',(now-300,))
             execute(c,'DELETE FROM rate_buckets WHERE started_at < %s',(now-86400,))
         _last_cleanup=now
 
@@ -518,6 +525,7 @@ def stock_document():
         with db() as c:
             row=one(c,'SELECT data_json,revision FROM stock_documents WHERE user_id=%s',(owner_id,))
             document=json.loads(row['data_json']) if row else {'stores':[{'id':'main','name':'Hlavní sklad'}],'products':[],'counts':[],'moves':[],'draft':None,'barInventories':[]}
+            document=scoped_stock(document,store_scope(c,g.user))
             latest=stock_latest_changes(c,owner_id,document)
         return jsonify(data=document,revision=row['revision'] if row else 0,latestChanges=latest)
     data=body()
@@ -531,6 +539,9 @@ def stock_document():
         row=one(c,'SELECT data_json,revision FROM stock_documents WHERE user_id=%s',(owner_id,))
         if row['revision']!=revision:raise ApiError('Sklad byl změněn na jiném zařízení. Načtěte aktuální stav a změnu zopakujte.',409)
         old=json.loads(row['data_json'])
+        clean=merge_scoped_stock(old,clean,store_scope(c,g.user))
+        try:clean=validate_stock(clean)
+        except StockValidationError as e:raise ApiError(str(e))
         for permission in required_permissions(old,clean):
             if not has_permission(g.user,permission):raise ApiError('K této změně nemáte oprávnění: '+PERMISSIONS[permission][0]+'.',403)
         try:validate_active_changes(old,clean)
@@ -540,8 +551,9 @@ def stock_document():
         if changed!=1:raise ApiError('Sklad byl změněn na jiném zařízení. Obnovte stránku.',409)
         write_stock_changes(c,owner_id,old,clean,revision+1)
         audit(c,g.user['id'],'stock_saved','Uložení skladů a inventur')
-        latest=stock_latest_changes(c,owner_id,clean)
-    return jsonify(ok=True,revision=revision+1,data=clean,latestChanges=latest)
+        visible=scoped_stock(clean,store_scope(c,g.user))
+        latest=stock_latest_changes(c,owner_id,visible)
+    return jsonify(ok=True,revision=revision+1,data=visible,latestChanges=latest)
 
 @app.get('/api/admin/stock-changes')
 @authenticated(permission='stock.audit')
@@ -561,11 +573,16 @@ def stock_changes():
             conditions.append('created_at'+operator+'%s');args.append(stamp)
     query=request.args.get('q','').strip()
     if query:conditions.append('(LOWER(label) LIKE %s OR LOWER(actor_name) LIKE %s)');args.extend(['%'+query.lower()+'%']*2)
+    with db() as c:
+        scope=store_scope(c,g.user)
+    if scope is not None:
+        if not scope:return jsonify(changes=[],total=0,offset=offset,limit=limit,stores=[])
+        conditions.append('store_id IN ('+','.join(['%s']*len(scope))+')');args.extend(scope)
     where=' WHERE '+' AND '.join(conditions) if conditions else ''
     with db() as c:
         total=one(c,'SELECT count(*) AS n FROM stock_change_log'+where,tuple(args))['n']
         rows=allrows(c,'SELECT * FROM stock_change_log'+where+' ORDER BY created_at DESC,id DESC LIMIT %s OFFSET %s',tuple(args+[limit,offset]))
-        stores=allrows(c,"SELECT DISTINCT store_id,store_name FROM stock_change_log WHERE store_id<>'' ORDER BY store_name")
+        stores=allrows(c,'SELECT DISTINCT store_id,store_name FROM stock_change_log'+where+' ORDER BY store_name',tuple(args))
     for row in rows:row['before']=json.loads(row.pop('before_json'));row['after']=json.loads(row.pop('after_json'))
     return jsonify(changes=rows,total=total,offset=offset,limit=limit,stores=stores)
 
@@ -639,4 +656,7 @@ def pwa_style():return send_from_directory(WEB,'pwa.css')
 def pwa_icon(name):return send_from_directory(WEB/'icons',name)
 @app.get('/favicon.ico')
 def favicon():return send_from_directory(WEB/'icons','icon-192.png',mimetype='image/png')
+from server.work import register as register_work
+register_work(app)
+
 if __name__=='__main__':app.run(host='0.0.0.0',port=int(os.environ.get('PORT','10000')))

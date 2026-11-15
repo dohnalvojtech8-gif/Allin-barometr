@@ -9,6 +9,7 @@ PERMISSIONS={
  'inventory.adjust':('Opravovat uzavřené inventury',False),
  'catalog.unlock':('Odemykat alkoholické nápoje',True),
  'users.manage':('Spravovat běžné uživatele a pozvánky',False),
+ 'work.inventory':('Spouštět inventury na pracovním terminálu',False),
  'stock.audit':('Číst historii všech skladových změn',False),
 }
 def effective_permissions(user):

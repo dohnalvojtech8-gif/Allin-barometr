@@ -7,7 +7,8 @@ import time
 from urllib.parse import urlparse, parse_qs
 
 TABLES = ('users', 'stock_documents', 'stock_change_log', 'shop_bundles', 'bottle_calibrations', 'scan_photos',
-          'sessions', 'invitations', 'invitation_uses', 'events', 'unlocks', 'rate_buckets')
+          'sessions', 'invitations', 'invitation_uses', 'events', 'unlocks', 'rate_buckets',
+          'work_access', 'work_devices', 'work_sessions')
 
 def migrate(source_url, target_url, schema, statements, source_schema='public'):
     import psycopg
@@ -38,7 +39,7 @@ def migrate(source_url, target_url, schema, statements, source_schema='public'):
             source.execute('SET lock_timeout TO \'60s\'')
             existing = {r['table_name'] for r in source.execute('SELECT table_name FROM information_schema.tables WHERE table_schema=%s',(source_schema,)).fetchall()}
             tables = [t for t in TABLES if t in existing]
-            if not (set(TABLES)-{'stock_documents','stock_change_log'} <= existing):
+            if not (set(TABLES)-{'stock_documents','stock_change_log','work_access','work_devices','work_sessions'} <= existing):
                 raise RuntimeError('Original account tables are incomplete; migration stopped')
             source.execute(sql.SQL('LOCK TABLE {} IN SHARE ROW EXCLUSIVE MODE').format(sql.SQL(',').join(sql.Identifier(source_schema, t) for t in tables)))
             for statement in statements:
