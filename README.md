@@ -8,7 +8,7 @@
 
 - Serverové účty, pozvánky, oprávnění a administrátorský přehled aktivit.
 - Katalog a knihovna lahví; ceny digitálního odemčení 0,39–0,99 €.
-- 1 614 značkových a tematických balíčků v databázi, osm nabídek s obměnou každé pondělí podle Europe/Prague.
+- 1 614 značkových a tematických balíčků v databázi, osm nabídek s obměnou každý den podle Europe/Prague.
 - Sekvenční inventura s měnitelným pořadím, celoobrazovková kamera, ukládání soukromých snímků a historie.
 - Ruční odečet, kalibrované vážení a soukromé vícebodové profily pro konkrétní produkt a kapacitu.
 - Volitelné napojení automatické AI analýzy. Bez serverové konfigurace se nespouští; přesnost na reálných lahvích zatím není ověřená.
@@ -39,3 +39,7 @@ Na Renderu běží `barometr-app` podle `render-auth.yaml`. Původní statický 
 - [Zdroje původních fotografií](dokumentace/ZDROJE-OBRAZKU.md)
 
 - [Pracovní terminál: PINy, sklady a sdílený tablet](dokumentace/PRACOVNI-REZIM.md)
+
+## Přehled a design (0.14)
+
+Sklady mají nastavitelnou barvu a režim výplně nebo ohraničení. Hlavní strana porovnává počty produktů ve skladech a zobrazuje denní nabídky v intervalu 15 sekund. Přechod dne se řídí Europe/Prague; nejde o automatizované vytváření nových cen. Galerie `/designs` obsahuje 10 designových variant × 5 ukázkových obrazovek s demonstračními daty.

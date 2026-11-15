@@ -46,3 +46,18 @@ def test_requested_jager_deal_all_sizes_and_weekly_rotation():
  # Last moment of a week and first moment of the next choose different offers.
  assert choose_week(TEMPLATES,datetime(2026,11,15,23,59,59,tzinfo=tz))['weekKey']=='2026-11-09'
  assert second['weekKey']=='2026-11-16'
+
+
+def test_daily_rotation_midnight_year_boundary_and_dst():
+ from server.shop import choose_day,day_window
+ tz=ZoneInfo('Europe/Prague')
+ first=choose_day(TEMPLATES,datetime(2026,11,15,23,59,59,tzinfo=tz))
+ second=choose_day(TEMPLATES,datetime(2026,11,16,0,0,tzinfo=tz))
+ assert len(first['offers'])==len(second['offers'])==8
+ assert not {t['id'] for t in first['offers']} & {t['id'] for t in second['offers']}
+ assert first['weekKey']=='2026-11-15' and second['weekKey']=='2026-11-16'
+ assert day_window(datetime(2026,12,31,tzinfo=tz))[:2]==('2026-12-31','2027-01-01')
+ for day,hours in [(datetime(2027,3,28,tzinfo=tz),23),(datetime(2027,10,31,tzinfo=tz),25)]:
+  result=choose_day(TEMPLATES,day)
+  assert datetime.fromisoformat(result['expiresAt']).timestamp()-day.timestamp()==hours*3600
+ assert choose_day(TEMPLATES,datetime(2026,11,15,8,tzinfo=tz))['offers']==first['offers']

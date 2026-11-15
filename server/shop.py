@@ -1,4 +1,4 @@
-"""Deterministic weekly offers; all arithmetic uses integer euro cents."""
+"""Deterministic daily and legacy weekly offers; all arithmetic uses integer euro cents."""
 import hashlib
 import math
 import re
@@ -79,7 +79,18 @@ def build_templates(products):
 
 
 def choose_week(templates, now=None):
-    start, end, index = week_window(now)
+    return _choose(templates, now, week_window)
+
+def day_window(now=None):
+    local = (now or datetime.now(ZoneInfo("Europe/Prague"))).astimezone(ZoneInfo("Europe/Prague"))
+    day = local.date()
+    return day.isoformat(), (day + timedelta(days=1)).isoformat(), (day - EPOCH).days
+
+def choose_day(templates, now=None):
+    return _choose(templates, now, day_window)
+
+def _choose(templates, now, window):
+    start, end, index = window(now)
     small = sorted((t for t in templates if t['kind'] == 'duo'),
                    key=lambda t: (not t.get('special'), hashlib.sha256(t['id'].encode()).hexdigest()))
     large = sorted((t for t in templates if t['kind'] == 'collection'), key=lambda t: t['id'])

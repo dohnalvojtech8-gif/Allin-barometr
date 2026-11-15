@@ -102,7 +102,7 @@ raw=(ROOT/'aplikace/catalog-data.js').read_text()
 CATALOG=json.loads(raw.split(' = ',1)[1].rstrip(';\n'))
 PRODUCTS={p['id']:p for p in CATALOG['products']}
 
-from server.shop import build_templates,choose_week,quote
+from server.shop import build_templates,choose_day as choose_week,quote
 
 def seed_shop():
     templates=build_templates(CATALOG['products'])
@@ -622,9 +622,13 @@ def stock_script():return send_from_directory(WEB,'stock.js')
 def health():
     with db() as c:execute(c,'SELECT 1')
     from server.vision import configuration
-    return jsonify(status='ok',version='0.13.0',database='supabase' if SUPABASE_DATABASE_URL else 'postgres',freeUnlocks=FREE_UNLOCKS,automaticLevelEnabled=configuration()['enabled'],shopBundleTemplates=len(SHOP_TEMPLATES))
+    return jsonify(status='ok',version='0.14.0',database='supabase' if SUPABASE_DATABASE_URL else 'postgres',freeUnlocks=FREE_UNLOCKS,automaticLevelEnabled=configuration()['enabled'],shopBundleTemplates=len(SHOP_TEMPLATES))
 @app.get('/')
 def index():return send_from_directory(WEB,'index.html')
+@app.get('/designs.js')
+def design_script():return send_from_directory(WEB,'designs.js')
+@app.get('/designs')
+def design_gallery():return send_from_directory(WEB,'designs.html')
 @app.get('/app.js')
 def javascript():return send_from_directory(WEB,'app.js')
 @app.get('/shop.js')

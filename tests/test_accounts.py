@@ -250,3 +250,17 @@ def test_regular_user_free_unlocks_inventory_and_temporary_switch(monkeypatch):
  assert u.post('/api/unlocks',json={'productId':other},headers=uh).status_code==403
  assert u.get('/api/products/'+product_id).status_code==403
  assert a.post('/api/unlocks',json={'productId':other},headers=h).status_code==200
+
+
+def test_daily_bundle_rejects_yesterdays_quote(monkeypatch):
+ from datetime import datetime
+ from zoneinfo import ZoneInfo
+ from server.shop import choose_day
+ tz=ZoneInfo('Europe/Prague')
+ monkeypatch.setattr('server.app.choose_week',lambda templates:choose_day(templates,datetime(2026,11,15,23,59,tzinfo=tz)))
+ a,h=login();yesterday=a.get('/api/shop').json
+ monkeypatch.setattr('server.app.choose_week',lambda templates:choose_day(templates,datetime(2026,11,16,0,0,tzinfo=tz)))
+ today=a.get('/api/shop').json
+ assert yesterday['weekKey']!=today['weekKey']
+ assert a.post('/api/shop/bundles/'+yesterday['offers'][0]['id']+'/unlock',json={'weekKey':yesterday['weekKey']},headers=h).status_code==409
+ assert a.post('/api/shop/bundles/'+today['offers'][0]['id']+'/unlock',json={'weekKey':today['weekKey']},headers=h).status_code==200

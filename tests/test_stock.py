@@ -36,7 +36,7 @@ def test_stock_rejects_invalid_references_nonfinite_counts_and_duplicate_ids():
   d=payload();mutate(d);rev=a.get('/api/stock').json['revision']
   assert a.put('/api/stock',json={'revision':rev,'data':d},headers=h).status_code==400
  assert a.get('/stock.js').status_code==200
- assert 'stock.js?v=0.13.0' in a.get('/').text
+ assert 'stock.js?v=0.14.0' in a.get('/').text
 
 def test_stock_audit_freezes_expected_values_and_cannot_be_forged():
  a,h=login();d=payload();rev=a.get('/api/stock').json['revision'];r=a.put('/api/stock',json={'revision':rev,'data':d},headers=h);assert r.status_code==200
@@ -126,3 +126,19 @@ def test_latest_stock_change_uses_current_profile_and_is_owner_scoped():
  assert r.json['latestChanges']['s1|pizza']['after']==350
  other,_=login('AdminTwo','test-admin-two-password')
  assert 's1|pizza' not in other.get('/api/stock').json['latestChanges']
+
+
+def test_warehouse_color_persists_validates_and_is_audited():
+ a,h=login();current=a.get('/api/stock').json;d=payload()
+ d['stores'][0].update(color='#a234ef',colorStyle='border')
+ r=a.put('/api/stock',json={'revision':current['revision'],'data':d},headers=h)
+ assert r.status_code==200,r.json
+ assert a.get('/api/stock').json['data']['stores'][0]['color']=='#a234ef'
+ assert a.get('/api/stock').json['data']['stores'][0]['colorStyle']=='border'
+ for invalid in ['red','#123','" onmouseover="alert(1)',None]:
+  bad=copy.deepcopy(d);bad['stores'][0]['color']=invalid
+  assert a.put('/api/stock',json={'revision':r.json['revision'],'data':bad},headers=h).status_code==400
+ d['stores'][0]['color']='#123456'
+ updated=a.put('/api/stock',json={'revision':r.json['revision'],'data':d},headers=h)
+ assert updated.status_code==200
+ assert any(c['field']=='color' and c['after']=='#123456' for c in a.get('/api/admin/stock-changes').json['changes'])

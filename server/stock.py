@@ -1,5 +1,6 @@
 """Account-owned warehouse records, isolated from existing bottle/profile state."""
 import math
+import re
 from datetime import datetime
 
 class StockValidationError(ValueError):
@@ -25,6 +26,8 @@ def validate_stock(data):
     stores=set();products=set();count_ids=set();move_ids=set()
     for s in data['stores']:
         if not isinstance(s,dict) or not text(s.get('id'),100) or s['id'] in stores or not text(s.get('name'),100):raise StockValidationError('Neplatný sklad.')
+        if 'color' in s and (not isinstance(s['color'],str) or not re.fullmatch(r'#[0-9a-fA-F]{6}',s['color'])):raise StockValidationError('Neplatná barva skladu.')
+        if s.get('colorStyle','fill') not in ('fill','border'):raise StockValidationError('Neplatné zobrazení barvy skladu.')
         stores.add(s['id'])
         if s.get('archivedAt') is not None and not date(s['archivedAt']):raise StockValidationError('Neplatné datum odstranění skladu.')
     for p in data['products']:
