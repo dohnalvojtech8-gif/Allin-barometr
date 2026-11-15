@@ -496,14 +496,30 @@ def write_stock_changes(c,owner,before,after,revision):
     for r in change_rows(before,after):
         execute(c,'INSERT INTO stock_change_log (id,owner_id,actor_id,actor_name,store_id,store_name,entity_id,kind,label,field,before_json,after_json,revision,created_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',(uid(),owner,g.user['id'],g.user['username'],r['store'],stores.get(r['store'],''),r['entity'],r['kind'],r['label'],r['field'],json.dumps(r['before'],ensure_ascii=False),json.dumps(r['after'],ensure_ascii=False),revision,time.time()))
 
+def stock_latest_changes(c,owner,data):
+    # Resolve the current profile name; historical usernames are only a fallback.
+    rows=allrows(c,"SELECT l.*,u.first_name,u.last_name FROM stock_change_log l LEFT JOIN users u ON u.id=l.actor_id WHERE l.owner_id=%s AND l.field='qty' AND l.kind IN ('inventura','pohyb') ORDER BY l.created_at DESC,l.id DESC",(owner,))
+    entities={r['id']:r for r in data.get('counts',[])+data.get('moves',[])}
+    latest={}
+    for r in rows:
+        entity=entities.get(r['entity_id'])
+        if not entity:continue
+        key=entity['store']+'|'+entity['product']
+        if key in latest:continue
+        latest[key]={'before':json.loads(r['before_json']),'after':json.loads(r['after_json']),'at':r['created_at'],'name':(' '.join(filter(None,[r['first_name'],r['last_name']])).strip() or r['actor_name'])}
+    return latest
+
 @app.route('/api/stock',methods=['GET','PUT'])
 @authenticated(permission='stock.view')
 def stock_document():
     from server.stock import validate_stock, StockValidationError, required_permissions, prepare_counts, validate_active_changes
     owner_id=g.user.get('stock_owner_id') or g.user['id']
     if request.method=='GET':
-        with db() as c:row=one(c,'SELECT data_json,revision FROM stock_documents WHERE user_id=%s',(owner_id,))
-        return jsonify(data=json.loads(row['data_json']) if row else {'stores':[{'id':'main','name':'Hlavní sklad'}],'products':[],'counts':[],'moves':[],'draft':None,'barInventories':[]},revision=row['revision'] if row else 0)
+        with db() as c:
+            row=one(c,'SELECT data_json,revision FROM stock_documents WHERE user_id=%s',(owner_id,))
+            document=json.loads(row['data_json']) if row else {'stores':[{'id':'main','name':'Hlavní sklad'}],'products':[],'counts':[],'moves':[],'draft':None,'barInventories':[]}
+            latest=stock_latest_changes(c,owner_id,document)
+        return jsonify(data=document,revision=row['revision'] if row else 0,latestChanges=latest)
     data=body()
     if type(data.get('revision')) is not int or data['revision']<0:raise ApiError('Neplatná verze skladu.')
     try:clean=validate_stock(data.get('data'))
@@ -524,7 +540,8 @@ def stock_document():
         if changed!=1:raise ApiError('Sklad byl změněn na jiném zařízení. Obnovte stránku.',409)
         write_stock_changes(c,owner_id,old,clean,revision+1)
         audit(c,g.user['id'],'stock_saved','Uložení skladů a inventur')
-    return jsonify(ok=True,revision=revision+1,data=clean)
+        latest=stock_latest_changes(c,owner_id,clean)
+    return jsonify(ok=True,revision=revision+1,data=clean,latestChanges=latest)
 
 @app.get('/api/admin/stock-changes')
 @authenticated(permission='stock.audit')

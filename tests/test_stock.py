@@ -107,3 +107,22 @@ def test_beer_weight_metadata_is_validated_and_preserved():
  p['fullWeightKg']=77;p['tapName']='x'*151
  with pytest.raises(StockValidationError):validate_stock(d)
  assert app.test_client().get('/reference.js').status_code==200
+
+def test_latest_stock_change_uses_current_profile_and_is_owner_scoped():
+ from server.app import db,execute
+ a,h=login();owner=a.get('/api/me').json['user']['id']
+ initial=a.get('/api/stock').json
+ r=a.put('/api/stock',json={'revision':initial['revision'],'data':payload()},headers=h)
+ assert r.status_code==200
+ with db() as c:
+  execute(c,'UPDATE users SET first_name=%s,last_name=%s WHERE id=%s',('Vojtěch','Novák',owner))
+ latest=a.get('/api/stock').json['latestChanges']['s1|pizza']
+ assert latest['name']=='Vojtěch Novák'
+ assert latest['after']==345
+ current=a.get('/api/stock').json;data=current['data']
+ data['moves'].append({'id':'latest-receipt','product':'pizza','store':'s1','qty':5,'reason':'Příjem','at':datetime.now(timezone.utc).isoformat()})
+ r=a.put('/api/stock',json={'revision':current['revision'],'data':data},headers=h)
+ assert r.json['latestChanges']['s1|pizza']['before']==345
+ assert r.json['latestChanges']['s1|pizza']['after']==350
+ other,_=login('AdminTwo','test-admin-two-password')
+ assert 's1|pizza' not in other.get('/api/stock').json['latestChanges']
