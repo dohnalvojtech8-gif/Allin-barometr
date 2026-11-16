@@ -26,7 +26,7 @@ def check(page,label):
 
 with sync_playwright() as p:
  browser=p.chromium.launch(executable_path='/usr/bin/chromium',headless=True,args=['--no-sandbox'])
- page=browser.new_page();errors=[];page.on('pageerror',lambda error:errors.append(str(error)))
+ page=browser.new_page(service_workers="block");errors=[];page.on('pageerror',lambda error:errors.append(str(error)))
  results=[]
  # Use a simulated venue me response to exercise its real server-served shell without creating a venue.
  for width in (1440,390,320):
@@ -34,17 +34,17 @@ with sync_playwright() as p:
   page.goto('http://127.0.0.1:10000/');page.locator('#auth-form').wait_for()
   results.append({'screen':'owner login','width':width,'minimumContrast':round(check(page,'owner'),2)})
   if width==390:page.screenshot(path='/tmp/noira-login-fixed.png',full_page=True)
-  # Current production venue shell is served from the local repo; use the exact HTML and local assets.
+  # Serve the actual venue document at a venue URL, with an anonymous session.
   html=Path('server/web/index.html').read_text()
+  venue_url='http://127.0.0.1:10000/v/00000000-0000-0000-0000-000000000001/'
+  page.route(venue_url,lambda route:route.fulfill(status=200,content_type='text/html',body=html))
   page.route('**/api/me',lambda route:route.fulfill(status=401,content_type='application/json',body='{"error":"Přihlaste se prosím."}'))
-  page.goto('http://127.0.0.1:10000/')
-  page.set_content(html)
+  page.goto(venue_url)
   page.locator('#auth-form').wait_for()
   results.append({'screen':'venue login','width':width,'minimumContrast':round(check(page,'venue'),2)})
-  page.evaluate("window.BarometrVenuePrefix='/v/preview'")
-  page.locator('[data-auth-mode=login]').click()
   page.locator('[data-auth-mode=register]').click()
   results.append({'screen':'registration','width':width,'minimumContrast':round(check(page,'register'),2)})
+  page.unroute(venue_url)
   page.unroute('**/api/me')
  assert not errors,errors
  print(json.dumps(results))
