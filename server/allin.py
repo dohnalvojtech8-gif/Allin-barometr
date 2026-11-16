@@ -1,0 +1,222 @@
+"""Owner hub and independent venue databases. Never accept a client supplied SQL schema."""
+import json
+import os
+import re
+import secrets
+import time
+from contextlib import contextmanager
+from pathlib import Path
+from flask import g, request, jsonify, send_from_directory
+
+VENUES="""CREATE TABLE IF NOT EXISTS allin_venues (
+ id TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ name TEXT NOT NULL, address TEXT NOT NULL DEFAULT '', created_at DOUBLE PRECISION NOT NULL)"""
+
+class VenueMount:
+    def __init__(self, application):self.application=application
+    def __call__(self, environ, start_response):
+        path=environ.get('PATH_INFO','')
+        match=re.match(r'^/v/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})(/|$)',path)
+        if match:
+            prefix='/v/'+match[1]
+            environ['allin.venue_id']=match[1]
+            environ['SCRIPT_NAME']=environ.get('SCRIPT_NAME','')+prefix
+            environ['PATH_INFO']=path[len(prefix):] or '/'
+        return self.application(environ,start_response)
+
+@contextmanager
+def venue_context(venue):
+    previous=getattr(g,'venue',None)
+    g.venue=venue
+    try:yield
+    finally:g.venue=previous
+
+def install_context(app):
+    from server.app import db,execute,one,ApiError,TEST_DB,SUPABASE_DATABASE_URL
+    with db(central=True) as c:
+        execute(c,VENUES)
+        execute(c,'CREATE INDEX IF NOT EXISTS allin_venues_owner ON allin_venues(owner_id,created_at)')
+        if not TEST_DB:
+            execute(c,'ALTER TABLE allin_venues ENABLE ROW LEVEL SECURITY')
+            execute(c,'REVOKE ALL ON allin_venues FROM PUBLIC')
+            if SUPABASE_DATABASE_URL:execute(c,'REVOKE ALL ON allin_venues FROM anon,authenticated')
+    app.wsgi_app=VenueMount(app.wsgi_app)
+
+    @app.before_request
+    def resolve_venue():
+        venue_id=request.environ.get('allin.venue_id')
+        g.venue=None
+        if venue_id:
+            with db(central=True) as c:venue=one(c,'SELECT * FROM allin_venues WHERE id=%s',(venue_id,))
+            if not venue:raise ApiError('Provoz neexistuje.',404)
+            g.venue=venue
+            if request.path.startswith('/api/owner/') or request.path=='/api/owner':raise ApiError('Centrální panel otevřete mimo provoz.',403)
+        elif request.path.startswith('/api/') and not (TEST_DB and os.environ.get('ALLIN_LEGACY_TEST_API')=='1'):
+            if request.path not in ('/api/login','/api/logout','/api/me','/api/password') and not request.path.startswith('/api/owner/'):
+                raise ApiError('Nejdříve vyberte provoz v centrálním panelu.',403)
+
+    @app.after_request
+    def private_venue_response(response):
+        if getattr(g,'venue',None):response.headers['Cache-Control']='no-store'
+        return response
+
+
+def register(app):
+    from server.app import (authenticated,db,execute,one,allrows,ApiError,body,textfield,uid,
+        init_db,seed_shop,public_user,password_hash,session_response,WEB,TEST_DB,COOKIE,SECURE,audit)
+    from server.permissions import PERMISSIONS
+    from server.stock import current_quantity
+
+    def owned(venue_id):
+        with db(central=True) as c:venue=one(c,'SELECT * FROM allin_venues WHERE id=%s AND owner_id=%s',(venue_id,g.user['id']))
+        if not venue:raise ApiError('Provoz neexistuje nebo k němu nemáte přístup.',404)
+        return venue
+
+    def summary(venue):
+        with venue_context(venue),db() as c:
+            row=one(c,'SELECT data_json FROM stock_documents WHERE user_id=%s',(venue['owner_id'],))
+            data=json.loads(row['data_json']) if row else {'stores':[],'products':[],'counts':[],'moves':[],'barInventories':[]}
+            stores=[s for s in data['stores'] if not s.get('archivedAt')]
+            value=0;low=0;known=0;unmeasured=0
+            for store in stores:
+                from server.work import local_products
+                for product in local_products(data,store['id']):
+                    qty=current_quantity(data,product['id'],store['id'])
+                    if qty is None:unmeasured+=1;continue
+                    known+=1;value+=qty*product.get('cost',0)
+                    if qty<product.get('min',0):low+=1
+            inventory_ids={r.get('inventoryId') or r['store']+'|'+r['at'] for r in data['counts']}
+            inventory_ids.update(r['id'] for r in data.get('barInventories',[]))
+            runs={r['id']:{'at':r['at'],'items':r['items']} for r in data.get('barInventories',[])}
+            for count in data['counts']:
+                key=count.get('inventoryId') or count['store']+'|'+count['at']
+                if key in {r['id'] for r in data.get('barInventories',[])}:continue
+                run=runs.setdefault(key,{'at':count['at'],'items':[]})
+                run['items'].append(count)
+            latest=max(runs.values(),key=lambda r:r['at'],default=None)
+            shortage=None;unpriced=False
+            if latest:
+                comparable=[i for i in latest['items'] if i.get('expected') is not None]
+                if comparable:
+                    short=[i for i in comparable if i['qty']<i['expected']]
+                    shortage=round(sum((i['expected']-i['qty'])*i.get('cost',0) for i in short),2)
+                    unpriced=any(i.get('cost',0)<=0 for i in short)
+            last=one(c,'SELECT created_at FROM events ORDER BY created_at DESC LIMIT 1')
+            team=one(c,"SELECT COUNT(*) AS n FROM users WHERE role='user'")['n']
+            return {**venue,'stockValue':round(value,2),'warehouses':len(stores),'products':len(data['products']),
+                'inventories':len(inventory_ids),'belowMinimum':low,'measuredPositions':known,'unmeasuredPositions':unmeasured,
+                'latestShortage':shortage,'unpricedShortage':unpriced,'latestInventoryAt':latest['at'] if latest else None,'employees':team,'lastActivity':last['created_at'] if last else None}
+
+    @app.get('/api/owner/venues')
+    @authenticated(admin=True)
+    def venues():
+        with db(central=True) as c:rows=allrows(c,'SELECT * FROM allin_venues WHERE owner_id=%s ORDER BY created_at,id',(g.user['id'],))
+        return jsonify(venues=[summary(v) for v in rows])
+
+    @app.post('/api/owner/venues')
+    @authenticated(admin=True)
+    def create():
+        values=body();name=textfield(values,'name',1,100);address=textfield({'address':values.get('address','')},'address',0,200)
+        venue={'id':uid(),'owner_id':g.user['id'],'name':name,'address':address,'created_at':time.time()}
+        # Provision first; publish the venue only after the private database is ready.
+        schema='venue_'+venue['id'].replace('-','')
+        if not TEST_DB:
+            with db(central=True) as c:
+                execute(c,'CREATE SCHEMA '+schema)
+                execute(c,'REVOKE ALL ON SCHEMA '+schema+' FROM PUBLIC')
+        try:
+            with venue_context(venue):
+                init_db(seed_admins=False)
+                with db() as c:
+                    actor=g.user
+                    execute(c,"INSERT INTO users (id,username,username_key,first_name,last_name,password_hash,role,created_at) VALUES (%s,%s,%s,%s,%s,%s,'admin',%s)",
+                        (actor['id'],actor['username'],actor['username_key'],actor['first_name'],actor['last_name'],password_hash(secrets.token_urlsafe(48)),time.time()))
+                    initial={'stores':[{'id':'main','name':'Hlavní sklad'}],'products':[],'counts':[],'moves':[],'draft':None,'barInventories':[],'barDraft':None}
+                    execute(c,'INSERT INTO stock_documents (user_id,revision,data_json,updated_at) VALUES (%s,0,%s,%s)',(actor['id'],json.dumps(initial),time.time()))
+                    audit(c,actor['id'],'venue_created','Vytvoření provozu '+name)
+                seed_shop()
+            with db(central=True) as c:
+                execute(c,'INSERT INTO allin_venues (id,owner_id,name,address,created_at) VALUES (%s,%s,%s,%s,%s)',tuple(venue[k] for k in ('id','owner_id','name','address','created_at')))
+                audit(c,g.user['id'],'venue_created','Vytvoření provozu '+name)
+        except Exception:
+            if TEST_DB:
+                Path(TEST_DB).with_name('venue_'+venue['id']+'.sqlite3').unlink(missing_ok=True)
+            else:
+                with db(central=True) as c:execute(c,'DROP SCHEMA '+schema+' CASCADE')
+            raise
+        return jsonify(venue=summary(venue)),201
+
+    @app.post('/api/owner/venues/<venue_id>/enter')
+    @authenticated(admin=True)
+    def enter(venue_id):
+        venue=owned(venue_id)
+        with venue_context(venue),db() as c:
+            user=one(c,'SELECT * FROM users WHERE id=%s',(g.user['id'],))
+            response=session_response(c,user)
+        # Keep the central session and every other venue session untouched.
+        cookies=response.headers.getlist('Set-Cookie')
+        response.headers.remove('Set-Cookie')
+        for value in cookies:response.headers.add('Set-Cookie',value.replace('Path=/',f'Path=/v/{venue_id}'))
+        response.set_data(app.json.dumps({'url':f'/v/{venue_id}/','name':venue['name']}))
+        return response
+
+    @app.get('/api/owner/activity')
+    @authenticated(admin=True)
+    def owner_activity():
+        with db(central=True) as c:rows=allrows(c,'SELECT * FROM allin_venues WHERE owner_id=%s',(g.user['id'],))
+        selected=request.args.get('venue','')
+        if selected:rows=[owned(selected)]
+        events=[]
+        for venue in rows:
+            with venue_context(venue),db() as c:
+                for event in allrows(c,'SELECT e.*,u.first_name,u.last_name,u.username FROM events e LEFT JOIN users u ON u.id=e.user_id ORDER BY e.created_at DESC LIMIT 100'):
+                    events.append({**event,'venueId':venue['id'],'venueName':venue['name']})
+        return jsonify(events=sorted(events,key=lambda e:(e['created_at'],e['id']),reverse=True)[:200],retentionDays=90)
+
+    @app.get('/api/owner/team')
+    @authenticated(admin=True)
+    def team():
+        with db(central=True) as c:rows=allrows(c,'SELECT * FROM allin_venues WHERE owner_id=%s ORDER BY created_at',(g.user['id'],))
+        members=[]
+        for venue in rows:
+            with venue_context(venue),db() as c:
+                for user in allrows(c,"SELECT * FROM users WHERE role='user' ORDER BY created_at"):
+                    members.append({**public_user(user),'venueId':venue['id'],'venueName':venue['name']})
+        return jsonify(members=members,permissions={k:v[0] for k,v in PERMISSIONS.items()})
+
+    @app.post('/api/owner/venues/<venue_id>/invites')
+    @authenticated(admin=True)
+    def invite(venue_id):
+        venue=owned(venue_id)
+        with venue_context(venue):
+            from server.app import invite_create
+            response=invite_create.__wrapped__()
+            data=response.get_json();data['venueUrl']=f'/v/{venue_id}/'
+            return jsonify(data)
+
+    @app.post('/api/owner/venues/<venue_id>/members/<member_id>')
+    @authenticated(admin=True)
+    def update_member(venue_id,member_id):
+        venue=owned(venue_id);values=body();permissions=values.get('permissions');status=values.get('status')
+        if permissions is not None and (not isinstance(permissions,dict) or set(permissions)-set(PERMISSIONS) or any(type(v) is not bool for v in permissions.values())):raise ApiError('Neplatná oprávnění.')
+        if status is not None and status not in ('active','suspended'):raise ApiError('Neplatný stav.')
+        with venue_context(venue),db() as c:
+            user=one(c,"SELECT * FROM users WHERE id=%s AND role='user'",(member_id,))
+            if not user:raise ApiError('Zaměstnanec neexistuje.',404)
+            if permissions is not None:execute(c,'UPDATE users SET permissions_json=%s WHERE id=%s',(json.dumps(permissions),member_id))
+            if status is not None:execute(c,'UPDATE users SET status=%s WHERE id=%s',(status,member_id))
+            execute(c,'DELETE FROM sessions WHERE user_id=%s',(member_id,))
+            execute(c,'DELETE FROM work_sessions WHERE user_id=%s',(member_id,))
+            audit(c,g.user['id'],'permissions_changed','Změna přístupu zaměstnance '+user['username'])
+        return jsonify(ok=True)
+
+    @app.get('/api/venue')
+    @authenticated()
+    def venue_identity():return jsonify(venue={k:g.venue[k] for k in ('id','name','address')})
+
+    @app.get('/owner.js')
+    def owner_js():return send_from_directory(WEB,'owner.js')
+    @app.get('/owner.css')
+    def owner_css():return send_from_directory(WEB,'owner.css')
+    @app.get('/venue-context.js')
+    def venue_js():return send_from_directory(WEB,'venue-context.js')

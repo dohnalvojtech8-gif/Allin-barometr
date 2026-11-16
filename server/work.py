@@ -73,7 +73,7 @@ def merge_scoped_stock(before,submitted,scope):
     return out
 
 def register(app):
-    from server.app import (db,one,allrows,execute,uid,digest,password_hash,password_ok,ApiError,body,authenticated,has_permission,effective_permissions,audit,SECURE,COOKIE,WEB,rate_limit,client_ip,write_stock_changes,stock_latest_changes)
+    from server.app import (db,one,allrows,execute,uid,digest,password_hash,password_ok,ApiError,body,authenticated,has_permission,effective_permissions,audit,SECURE,cookie_name,WEB,rate_limit,client_ip,write_stock_changes,stock_latest_changes)
     from server.stock import current_quantity,validate_stock,prepare_counts,StockValidationError
 
     def document(c,owner):
@@ -167,7 +167,7 @@ def register(app):
             execute(c,'INSERT INTO work_devices (token_hash,owner_id,csrf,created_at) VALUES (%s,%s,%s,%s)',(digest(token),g.user['id'],csrf,time.time()))
             execute(c,'DELETE FROM sessions WHERE token_hash=%s',(g.user['token_hash'],))
             audit(c,g.user['id'],'work_device_paired','Aktivace pracovního terminálu')
-        r=jsonify(ok=True);r.set_cookie(DEVICE,token,max_age=180*86400,secure=SECURE,httponly=True,samesite='Strict',path='/');r.delete_cookie(COOKIE,path='/');r.delete_cookie(SESSION,path='/');return r
+        r=jsonify(ok=True);r.set_cookie(DEVICE,token,max_age=180*86400,secure=SECURE,httponly=True,samesite='Strict',path=request.script_root or '/');r.delete_cookie(cookie_name(),path=request.script_root or '/');r.delete_cookie(SESSION,path=request.script_root or '/');return r
 
     @app.get('/api/work/session')
     def status():
@@ -194,7 +194,7 @@ def register(app):
             execute(c,'INSERT INTO work_sessions (token_hash,device_hash,user_id,csrf,last_activity) VALUES (%s,%s,%s,%s,%s)',(digest(token),d['token_hash'],u['id'],csrf,time.time()))
             execute(c,'DELETE FROM rate_buckets WHERE bucket=%s',(digest('work-pin-device:'+d['token_hash']),))
             audit(c,u['id'],'work_login','Přihlášení PINem na pracovním terminálu')
-        r=jsonify(ok=True);r.set_cookie(SESSION,token,max_age=86400,secure=SECURE,httponly=True,samesite='Strict',path='/');return r
+        r=jsonify(ok=True);r.set_cookie(SESSION,token,max_age=86400,secure=SECURE,httponly=True,samesite='Strict',path=request.script_root or '/');return r
 
     @app.post('/api/work/lock')
     def lock():
@@ -202,7 +202,7 @@ def register(app):
             d=device(c);u=employee(c,d)
             if not any(secrets.compare_digest(request.headers.get('X-CSRF-Token',''),v) for v in [d['csrf']]+([u['csrf']] if u else [])):raise ApiError('Obnovte pracovní bránu.',403)
             execute(c,'DELETE FROM work_sessions WHERE device_hash=%s',(d['token_hash'],))
-        r=jsonify(ok=True);r.delete_cookie(SESSION,path='/');return r
+        r=jsonify(ok=True);r.delete_cookie(SESSION,path=request.script_root or '/');return r
 
     @app.post('/api/work/touch')
     @worker()
@@ -217,7 +217,7 @@ def register(app):
         with db() as c:
             audit(c,g.user['id'],'work_device_unpaired','Ukončení pracovního režimu majitelem')
             execute(c,'DELETE FROM work_devices WHERE token_hash=%s',(g.work_device['token_hash'],))
-        r=jsonify(ok=True);r.delete_cookie(DEVICE,path='/');r.delete_cookie(SESSION,path='/');return r
+        r=jsonify(ok=True);r.delete_cookie(DEVICE,path=request.script_root or '/');r.delete_cookie(SESSION,path=request.script_root or '/');return r
 
     @app.get('/api/work/stock')
     @worker('stock.view')

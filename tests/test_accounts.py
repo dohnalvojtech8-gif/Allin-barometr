@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 os.environ['BAROMETR_TEST_DB']=str(Path(tempfile.mkdtemp())/'accounts.sqlite3')
 os.environ['BAROMETR_TEST_HTTP']='1'
+os.environ['ALLIN_LEGACY_TEST_API']='1'
 os.environ['ADMIN1_USERNAME']='AdminOne'
 os.environ['ADMIN1_PASSWORD']='test-admin-one-password'
 os.environ['ADMIN2_USERNAME']='AdminTwo'

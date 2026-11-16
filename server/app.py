@@ -3,7 +3,7 @@ import os, json, time, secrets, hashlib, hmac, re, uuid, sqlite3, unicodedata, l
 from pathlib import Path
 from contextlib import contextmanager
 from functools import wraps
-from flask import Flask, request, jsonify, g, send_from_directory, make_response
+from flask import Flask, request, jsonify, g, send_from_directory, make_response, has_request_context
 
 ROOT=Path(__file__).resolve().parent.parent
 WEB=Path(__file__).resolve().parent/'web'
@@ -12,7 +12,7 @@ SUPABASE_DATABASE_URL=os.environ.get('SUPABASE_DATABASE_URL') or os.environ.get(
 logging.warning('BAROMETR database configuration keys: %s', ','.join(sorted(k for k in os.environ if re.fullmatch(r'[A-Z_][A-Z0-9_]*',k) and ('SUPABASE' in k or 'DATABASE' in k or k.startswith('BAROMETR_DB')))))
 DATABASE_URL=SUPABASE_DATABASE_URL or SOURCE_DATABASE_URL
 TEST_DB=os.environ.get('BAROMETR_TEST_DB')
-DATABASE_SCHEMA='barometr' if SUPABASE_DATABASE_URL else os.environ.get('BAROMETR_DB_SCHEMA','')
+DATABASE_SCHEMA=os.environ.get('BAROMETR_DB_SCHEMA','allin_barometr')
 if DATABASE_SCHEMA and not re.fullmatch(r'[a-z_][a-z0-9_]{0,62}',DATABASE_SCHEMA):
     raise RuntimeError('BAROMETR_DB_SCHEMA must be a lowercase PostgreSQL schema name')
 if not DATABASE_URL and not TEST_DB: raise RuntimeError('DATABASE_URL is required')
@@ -23,17 +23,21 @@ SECURE=os.environ.get('BAROMETR_TEST_HTTP')!='1'
 app=Flask(__name__,static_folder=None)
 app.config.update(MAX_CONTENT_LENGTH=4*1024*1024,JSON_SORT_KEYS=False)
 
-def connect():
+def connect(central=False):
+    venue=getattr(g,'venue',None) if has_request_context() and not central else None
+    schema=('venue_'+venue['id'].replace('-','')) if venue else DATABASE_SCHEMA
+    test_path=str(Path(TEST_DB).parent/('venue_'+venue['id']+'.sqlite3')) if TEST_DB and venue else TEST_DB
     if TEST_DB:
-        c=sqlite3.connect(TEST_DB,timeout=15);c.row_factory=sqlite3.Row;c.execute('PRAGMA foreign_keys=ON');return c
+        c=sqlite3.connect(test_path,timeout=15);c.row_factory=sqlite3.Row;c.execute('PRAGMA foreign_keys=ON');return c
     import psycopg
     from psycopg.rows import dict_row
-    options={'options':f'-c search_path={DATABASE_SCHEMA}'} if DATABASE_SCHEMA else {}
-    return psycopg.connect(DATABASE_URL,row_factory=dict_row,connect_timeout=10,**options)
+    c=psycopg.connect(DATABASE_URL,row_factory=dict_row,connect_timeout=10,prepare_threshold=None)
+    c.execute('SET search_path TO '+schema)
+    return c
 def execute(c,sql,args=()): return c.execute(sql.replace('%s','?') if TEST_DB else sql,args)
 @contextmanager
-def db():
-    c=connect()
+def db(central=False):
+    c=connect(central=central)
     try:
         if TEST_DB:c.execute('BEGIN IMMEDIATE')
         yield c;c.commit()
@@ -73,30 +77,29 @@ def audit(c,user_id,action,detail=''):
 from server.work import TABLES as WORK_TABLES,store_scope,scoped_stock,merge_scoped_stock
 SCHEMA.extend(WORK_TABLES)
 
-def init_db():
+def init_db(seed_admins=True):
     with db() as c:
         for sql in SCHEMA:execute(c,sql)
         columns={r['name'] for r in allrows(c,'PRAGMA table_info(users)')} if TEST_DB else {r['column_name'] for r in allrows(c,"SELECT column_name FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='users'")}
         if 'permissions_json' not in columns:execute(c,"ALTER TABLE users ADD COLUMN permissions_json TEXT NOT NULL DEFAULT '{}'")
         if 'stock_owner_id' not in columns:execute(c,'ALTER TABLE users ADD COLUMN stock_owner_id TEXT REFERENCES users(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED')
-        if SUPABASE_DATABASE_URL and not TEST_DB:
-            for table in ('work_access','work_devices','work_sessions'):
-                execute(c,'ALTER TABLE '+table+' ENABLE ROW LEVEL SECURITY')
-                execute(c,'REVOKE ALL ON '+table+' FROM PUBLIC,anon,authenticated')
-            execute(c,'ALTER TABLE stock_documents ENABLE ROW LEVEL SECURITY')
-            execute(c,'ALTER TABLE stock_change_log ENABLE ROW LEVEL SECURITY')
-            execute(c,'REVOKE ALL ON stock_change_log FROM PUBLIC,anon,authenticated')
-            execute(c,'REVOKE ALL ON stock_documents FROM PUBLIC,anon,authenticated')
-        for number in (1,2):
+        if not TEST_DB:
+            for table in allrows(c,"SELECT tablename FROM pg_tables WHERE schemaname=current_schema()"):
+                name=table['tablename']
+                execute(c,'ALTER TABLE '+name+' ENABLE ROW LEVEL SECURITY')
+                execute(c,'REVOKE ALL ON '+name+' FROM PUBLIC')
+                if SUPABASE_DATABASE_URL:execute(c,'REVOKE ALL ON '+name+' FROM anon,authenticated')
+        for number in ((1,2) if seed_admins else ()):
             name=os.environ.get(f'ADMIN{number}_USERNAME');password=os.environ.get(f'ADMIN{number}_PASSWORD')
             if name and password:
                 execute(c,"INSERT INTO users (id,username,username_key,first_name,last_name,password_hash,role,created_at) VALUES (%s,%s,%s,%s,%s,%s,'admin',%s) ON CONFLICT (username_key) DO NOTHING",(uid(),name,name.casefold(),name,'',password_hash(password),time.time()))
         execute(c,'DELETE FROM sessions WHERE expires_at < %s',(time.time(),))
         execute(c,'DELETE FROM events WHERE created_at < %s',(time.time()-90*86400,))
         execute(c,'DELETE FROM rate_buckets WHERE started_at < %s',(time.time()-86400,))
-if SUPABASE_DATABASE_URL and not TEST_DB:
-    from server.migrate_database import migrate
-    migrate(SOURCE_DATABASE_URL, SUPABASE_DATABASE_URL, DATABASE_SCHEMA, SCHEMA, os.environ.get('BAROMETR_SOURCE_DB_SCHEMA','public'))
+if not TEST_DB:
+    with db(central=True) as c:
+        execute(c,'CREATE SCHEMA IF NOT EXISTS '+DATABASE_SCHEMA)
+        execute(c,'REVOKE ALL ON SCHEMA '+DATABASE_SCHEMA+' FROM PUBLIC')
 init_db()
 raw=(ROOT/'aplikace/catalog-data.js').read_text()
 CATALOG=json.loads(raw.split(' = ',1)[1].rstrip(';\n'))
@@ -127,18 +130,20 @@ def unexpected(e):
     if isinstance(e,HTTPException):return jsonify(error='Požadavek nelze zpracovat.'),e.code
     app.logger.error('Unhandled request failure: %s',type(e).__name__)
     return jsonify(error='Dočasná chyba serveru. Zkuste to znovu.'),500
-_last_cleanup=0
+from server.allin import install_context
+install_context(app)
+_last_cleanup={}
 @app.before_request
 def cleanup_expired():
-    global _last_cleanup
-    now=time.time()
-    if now-_last_cleanup>3600:
+    now=time.time();key=getattr(g,'venue',None)
+    key=key['id'] if key else 'owner'
+    if now-_last_cleanup.get(key,0)>3600:
         with db() as c:
             execute(c,'DELETE FROM events WHERE created_at < %s',(now-90*86400,))
             execute(c,'DELETE FROM sessions WHERE expires_at < %s',(now,))
             execute(c,'DELETE FROM work_sessions WHERE last_activity < %s',(now-300,))
             execute(c,'DELETE FROM rate_buckets WHERE started_at < %s',(now-86400,))
-        _last_cleanup=now
+        _last_cleanup[key]=now
 
 @app.before_request
 def protect_origin():
@@ -168,14 +173,23 @@ def textfield(data,key,minimum=1,maximum=64):
     return v
 from server.permissions import has_permission, effective_permissions, PERMISSIONS
 
+def cookie_name():
+    venue=getattr(g,'venue',None)
+    return COOKIE+'_'+venue['id'] if venue else COOKIE
+
 def authenticated(admin=False,bottles=False,permission=None):
     def decorator(fn):
         @wraps(fn)
         def wrapped(*args,**kwargs):
-            token=request.cookies.get(COOKIE,'')
+            token=request.cookies.get(cookie_name(),'')
             with db() as c:
                 row=one(c,"SELECT u.*,s.csrf,s.token_hash FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=%s AND s.expires_at>%s AND u.status='active'",(digest(token),time.time()))
                 if not row:raise ApiError('Přihlaste se prosím.',401)
+                if getattr(g,'venue',None) and row['role']=='admin':
+                    # Owner entry is tied to a live central session on this browser.
+                    with db(central=True) as owner_db:
+                        owner_session=one(owner_db,"SELECT s.user_id FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=%s AND s.expires_at>%s AND u.status='active'",(digest(request.cookies.get(COOKIE,'')),time.time()))
+                    if not owner_session or owner_session['user_id']!=g.venue['owner_id'] or row['id']!=g.venue['owner_id']:raise ApiError('Přihlaste se do centrálního panelu majitele.',401)
                 if permission and not has_permission(row,permission):raise ApiError('K této akci nemáte oprávnění.',403)
                 if admin and row['role']!='admin':raise ApiError('Tato akce je dostupná pouze administrátorům.',403)
                 if bottles and permission!='catalog.unlock' and not has_permission(row,'inventory.run'):raise ApiError('Nemáte oprávnění provádět inventury.',403)
@@ -201,7 +215,7 @@ def session_response(c,u):
     execute(c,'INSERT INTO sessions (token_hash,user_id,csrf,created_at,expires_at) VALUES (%s,%s,%s,%s,%s)',(digest(token),u['id'],csrf,now,now+SESSION_DAYS*86400))
     execute(c,'UPDATE users SET last_login=%s,last_seen=%s,login_count=login_count+1 WHERE id=%s',(now,now,u['id']))
     audit(c,u['id'],'login','Úspěšné přihlášení')
-    response=jsonify(ok=True);response.set_cookie(COOKIE,token,max_age=SESSION_DAYS*86400,httponly=True,secure=SECURE,samesite='Lax',path='/');return response
+    response=jsonify(ok=True);response.set_cookie(cookie_name(),token,max_age=SESSION_DAYS*86400,httponly=True,secure=SECURE,samesite='Lax',path=request.script_root or '/');return response
 @app.post('/api/login')
 def login():
     data=body();username=textfield(data,'username',1,64);password=data.get('password','')
@@ -229,6 +243,7 @@ def register():
         count=execute(c,'UPDATE invitations SET used_count=used_count+1 WHERE id=%s AND revoked=0 AND expires_at>%s AND used_count<max_uses',(invite['id'],time.time())).rowcount
         if count!=1:raise ApiError('Pozvánka je neplatná, použitá nebo vypršela.')
         id=uid();execute(c,"INSERT INTO users (id,username,username_key,first_name,last_name,password_hash,role,created_at) VALUES (%s,%s,%s,%s,%s,%s,'user',%s)",(id,username,username.casefold(),first,last,password_hash(password),time.time()))
+        if getattr(g,'venue',None):execute(c,'UPDATE users SET stock_owner_id=%s WHERE id=%s',(g.venue['owner_id'],id))
         execute(c,'INSERT INTO invitation_uses (id,invite_id,user_id,used_at) VALUES (%s,%s,%s,%s)',(uid(),invite['id'],id,time.time()))
         audit(c,id,'registered','Registrace pomocí pozvánky')
         return session_response(c,one(c,'SELECT * FROM users WHERE id=%s',(id,)))
@@ -243,7 +258,7 @@ def me():
 @authenticated()
 def logout():
     with db() as c:execute(c,'DELETE FROM sessions WHERE token_hash=%s',(g.user['token_hash'],));audit(c,g.user['id'],'logout','Odhlášení')
-    r=jsonify(ok=True);r.delete_cookie(COOKIE,path='/');return r
+    r=jsonify(ok=True);r.delete_cookie(cookie_name(),path=request.script_root or '/');return r
 @app.get('/api/catalog')
 @authenticated()
 def catalog():return jsonify(CATALOG)
@@ -624,7 +639,7 @@ def health():
     from server.vision import configuration
     return jsonify(status='ok',version='0.14.0',database='supabase' if SUPABASE_DATABASE_URL else 'postgres',freeUnlocks=FREE_UNLOCKS,automaticLevelEnabled=configuration()['enabled'],shopBundleTemplates=len(SHOP_TEMPLATES))
 @app.get('/')
-def index():return send_from_directory(WEB,'index.html')
+def index():return send_from_directory(WEB,'index.html' if getattr(g,'venue',None) else 'owner.html')
 @app.get('/designs.js')
 def design_script():return send_from_directory(WEB,'designs.js')
 @app.get('/designs')
@@ -646,7 +661,15 @@ def css():return send_from_directory(WEB,'style.css')
 @app.get('/assets/<path:name>')
 def assets(name):return send_from_directory(ROOT/'aplikace/assets',name)
 @app.get('/manifest.webmanifest')
-def pwa_manifest():return send_from_directory(WEB,'manifest.webmanifest',mimetype='application/manifest+json')
+def pwa_manifest():
+    manifest=json.loads((WEB/'manifest.webmanifest').read_text())
+    venue=getattr(g,'venue',None)
+    if venue:
+        prefix='/v/'+venue['id']+'/'
+        manifest.update(id=prefix,name=venue['name']+' · Barometr',short_name=venue['name'][:24],start_url=prefix,scope=prefix)
+    else:manifest.update(name='Allin Barometr',short_name='Allin',description='Centrální panel majitele provozů')
+    response=jsonify(manifest);response.mimetype='application/manifest+json'
+    return response
 @app.get('/sw.js')
 def pwa_worker():
     response=send_from_directory(WEB,'sw.js',mimetype='application/javascript')
@@ -677,5 +700,8 @@ def premium_preview_asset(name):
 @app.get('/premium-theme.css')
 def premium_theme():
     return send_from_directory(WEB,'premium-theme.css')
+
+from server.allin import register as register_allin
+register_allin(app)
 
 if __name__=='__main__':app.run(host='0.0.0.0',port=int(os.environ.get('PORT','10000')))

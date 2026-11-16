@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: barometr-app
+    name: allin-barometr
     runtime: python
     region: frankfurt
     plan: free
@@ -10,23 +10,13 @@ services:
     healthCheckPath: /healthz
     autoDeployTrigger: commit
     envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: barometr-accounts
-          property: connectionString
       - key: PYTHON_VERSION
         value: 3.12.8
+      - key: SUPABASE_DATABASE_URL
+        sync: false
+      - key: BAROMETR_DB_SCHEMA
+        value: allin_barometr
       - key: ADMIN1_USERNAME
         sync: false
       - key: ADMIN1_PASSWORD
         sync: false
-      - key: ADMIN2_USERNAME
-        sync: false
-      - key: ADMIN2_PASSWORD
-        sync: false
-databases:
-  - name: barometr-accounts
-    plan: free
-    region: frankfurt
-    postgresMajorVersion: '17'
-    ipAllowList: []

@@ -36,7 +36,7 @@ def test_stock_rejects_invalid_references_nonfinite_counts_and_duplicate_ids():
   d=payload();mutate(d);rev=a.get('/api/stock').json['revision']
   assert a.put('/api/stock',json={'revision':rev,'data':d},headers=h).status_code==400
  assert a.get('/stock.js').status_code==200
- assert 'stock.js?v=0.14.0' in a.get('/').text
+ assert 'owner.js' in a.get('/').text
 
 def test_stock_audit_freezes_expected_values_and_cannot_be_forged():
  a,h=login();d=payload();rev=a.get('/api/stock').json['revision'];r=a.put('/api/stock',json={'revision':rev,'data':d},headers=h);assert r.status_code==200

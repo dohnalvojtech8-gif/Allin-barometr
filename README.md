@@ -1,45 +1,71 @@
-# BAROMETR 0.10
+# Allin Barometr
 
-Účtová aplikace pro inventuru barů: 1 049 produktů, 1 231 doložených objemových variant a 10 kategorií.
+Centrální aplikace majitele s libovolným počtem samostatných provozů. Vychází z [Barometru](https://github.com/dohnalvojtech8-gif/Barometr); zachovává jeho účtovou aplikaci, obchod s lahvemi a balíčky, sklady, inventury, kalibrace, skenování i pracovní terminál s PINem.
 
-[Otevřít aplikaci](https://barometr-app.onrender.com/)
+## Menu majitele
 
-## Aktuální funkce
+1. Souhrnný přehled všech provozů
+2. Moje provozy
+3. Uživatelé a přístupy k provozům
+4. Vytvoření nového provozu
+5. Porovnání provozů
+6. Aktivita napříč provozy
+7. Nastavení majitele a účtu
 
-- Serverové účty, pozvánky, oprávnění a administrátorský přehled aktivit.
-- Katalog a knihovna lahví; ceny digitálního odemčení 0,39–0,99 €.
-- 1 614 značkových a tematických balíčků v databázi, osm nabídek s obměnou každý den podle Europe/Prague.
-- Sekvenční inventura s měnitelným pořadím, celoobrazovková kamera, ukládání soukromých snímků a historie.
-- Ruční odečet, kalibrované vážení a soukromé vícebodové profily pro konkrétní produkt a kapacitu.
-- Volitelné napojení automatické AI analýzy. Bez serverové konfigurace se nespouští; přesnost na reálných lahvích zatím není ověřená.
+Menu uvnitř provozu přebírá původní Barometr.
 
-**Platby nejsou spuštěné.** Všichni přihlášení uživatelé dočasně odemykají produkty i balíčky zdarma bez omezení počtu. Ceny zůstávají informativně zobrazené. Odemykání neznamená vytvoření fyzické lahve ani ověřenou kalibraci všech hladin.
+## Render + Supabase
 
-## Spuštění a ověření
+1. Vytvořte samostatný projekt Supabase pro Allin Barometr.
+2. V Supabase otevřete **Connect → Session pooler**. Použijte PostgreSQL connection string (port 5432), doplňte databázové heslo a `sslmode=require`. Speciální znaky v hesle musí být URL encoded. Project URL ani API klíč nejsou připojením k databázi.
+3. V Renderu vytvořte Blueprint z tohoto repozitáře; načte soubor `render.yaml`. Případně založte Python Web Service se stejnými příkazy.
+4. V Render **Environment** vyplňte:
 
-Backend je Flask/PostgreSQL, zdroj `server/app.py`, frontend `server/web/`. Konfigurace účtů a lokálního SQLite testování: [README-ACCOUNTS.md](README-ACCOUNTS.md). V produkci je PostgreSQL povinný. Tajné hodnoty patří do prostředí, nikoli do repozitáře.
+| Proměnná | Hodnota |
+|---|---|
+| `SUPABASE_DATABASE_URL` | PostgreSQL connection string ze Supabase; pouze na serveru |
+| `ADMIN1_USERNAME` | Vaše přihlašovací jméno majitele |
+| `ADMIN1_PASSWORD` | Dlouhé vlastní heslo majitele |
+| `BAROMETR_DB_SCHEMA` | `allin_barometr` (již v Blueprintu) |
+
+Build: `pip install -r requirements.txt`
+
+Start: `gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120 server.app:app`
+
+Health check: `/healthz`
+
+5. Spusťte deploy a otevřete adresu služby. Přihlaste se údaji z bodu 4 a vytvořte první provoz.
+
+Tabulky a soukromá schémata se vytvářejí automaticky. Připojená databázová role potřebuje oprávnění vytvářet schémata a tabulky (standardní PostgreSQL připojení projektu). Schémata `allin_barometr` a `venue_*` nepřidávejte mezi Exposed schemas v Supabase. Aplikace používá vlastní serverové účty, nikoli Supabase Auth. Není potřeba publishable ani service role API klíč.
+
+Heslo z prostředí vytvoří účet při prvním startu; pozdější změny hesla se provádějí v aplikaci. Změna původního env hesla nepřepisuje existující účet.
+
+## Oddělení provozů
+
+- `/` je centrální panel, `/v/<id>/` konkrétní Barometr.
+- Každý provoz má vlastní PostgreSQL schéma, tabulky, uživatele, relace, sklady, záznamy, pozvánky, kalibrace a snímky. SQLite při testování používá samostatné soubory.
+- Identifikátor provozu se ověřuje v centrální evidenci. SQL schéma se odvozuje pouze z ověřeného serverového UUID.
+- Majitel vstupuje přes centrální panel. Jeho relace v provozu navíc vyžaduje platné centrální přihlášení; centrální odhlášení proto zneplatní běžný přístup majitele do provozů.
+- Zaměstnanec se registruje pozvánkou na adrese konkrétního provozu. Oprávnění i dostupné sklady se kontrolují serverově. Účty zaměstnanců jsou pro každý provoz samostatné.
+- Pracovní terminál zůstává svázaný s jedním provozem a má vlastní relace i PINy.
+- Tabulky mají RLS a odebraná veřejná oprávnění. Data se čtou přes Flask backend a jeho ověřené relace; frontend nemá databázové přihlašovací údaje.
+- Kopíruje se kód a katalog. Existující produkční účty a provozní data původního Barometru se neimportují automaticky.
+
+Porovnání vychází ze skladových dat a nákupních cen v Kč. Nezměřené položky nejsou zahrnuty do hodnoty zásob. Manko se uvádí pro poslední inventuru provozu; bez výchozího srovnání se nezobrazuje nula jako známý výsledek. Neoceněné manko je označené.
+
+## Lokální ověření
 
 ```sh
 python -m pip install -r requirements.txt pytest
 python -m pytest -q
-node scripts/overit.cjs
 node tests/scanner-math.cjs
+node tests/reference-weight.cjs
 ```
 
-Browser testy v `tests/` vyžadují Playwright a Chromium. Používají pouze vlastní lokální testovací účet a testovací data; nelze je spouštět proti produkčnímu účtu. Test AI používá simulované odpovědi a neměří skutečnou úspěšnost rozpoznávání.
+Původní testy používají výhradně dočasný SQLite a `ALLIN_LEGACY_TEST_API=1`. Tento režim není v PostgreSQL dostupný. Nové testy `tests/test_allin.py` vypínají legacy režim a ověřují produkční směrování, oddělení dvou provozů, zaměstnanců, pozvánek, odemčení a terminálů i přístup dalšího majitele.
 
-Na Renderu běží `barometr-app` podle `render-auth.yaml`. Původní statický web v `aplikace/index.html` přesměrovává na účtovou aplikaci. Staré HTML ukázky a skripty ve `scripts/` nejsou aktuální produkční frontend.
+Prohlížečový test: `python tests/allin-browser.py` (vyžaduje Playwright, Chromium a lokálně spuštěný server s testovacím účtem `owner` / `local-browser-test-password`). Používá jen `127.0.0.1:10000` a vytváří testovací provozy. Pro lokální server nastavte `BAROMETR_TEST_DB=/tmp/allin-local.sqlite3`, `BAROMETR_TEST_HTTP=1`, `ADMIN1_USERNAME=owner`, `ADMIN1_PASSWORD=local-browser-test-password` a spusťte výše uvedený start příkaz s portem 10000.
 
-## Dokumentace
+Nasazení na konkrétní Render a Supabase projekt je třeba ověřit po zadání skutečného připojení. Lokální SQLite testy neověřují síťové připojení ani oprávnění produkční databázové role.
 
-- [Ceny, balíčky a týdenní rotace](dokumentace/KATALOG-A-CENY.md)
-- [Skenování a omezení měření](dokumentace/SKENOVANI.md)
-- [AI analýza: konfigurace a stav ověření](dokumentace/AUTOMATICKE-ROZPOZNANI.md)
-- [Přidávání lahví](dokumentace/PRIDAVANI-LAHVI.md)
-- [Zdroje původních fotografií](dokumentace/ZDROJE-OBRAZKU.md)
-
-- [Pracovní terminál: PINy, sklady a sdílený tablet](dokumentace/PRACOVNI-REZIM.md)
-
-## Přehled a design (0.14)
-
-Sklady mají nastavitelnou barvu a režim výplně nebo ohraničení. Hlavní strana porovnává počty produktů ve skladech a zobrazuje denní nabídky v intervalu 15 sekund. Přechod dne se řídí Europe/Prague; nejde o automatizované vytváření nových cen. Galerie `/designs` obsahuje 10 designových variant × 5 ukázkových obrazovek s demonstračními daty.
+Původní dokumentace a známá omezení měření: [README-BAROMETR.md](README-BAROMETR.md), [dokumentace](dokumentace/). Platby zůstávají vypnuté a automatická AI analýza vyžaduje samostatnou konfiguraci stejně jako v původním Barometru.
