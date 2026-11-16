@@ -444,6 +444,16 @@ def activity():
             last=one(c,'SELECT created_at FROM events WHERE user_id=%s AND action=%s ORDER BY created_at DESC LIMIT 1',(g.user['id'],'view_'+action))
             if not last or time.time()-last['created_at']>20:audit(c,g.user['id'],'view_'+action,labels[action])
     return jsonify(ok=True)
+@app.post('/api/admin/users')
+@authenticated(admin=True)
+def employee_create():
+    from server.employees import create_employee
+    rate_limit(['employee-create:'+g.user['id']],30)
+    values=body()
+    owner_id=g.venue['owner_id'] if getattr(g,'venue',None) else g.user['id']
+    with db() as c:user=create_employee(c,values,owner_id,g.user['id'])
+    return jsonify(user=user,hasPin=True,venueUrl=(request.script_root or '')+'/'),201
+
 @app.get('/api/admin/users')
 @authenticated(permission='users.manage')
 def users_list():
@@ -647,7 +657,7 @@ def stock_script():return send_from_directory(WEB,'stock.js')
 def health():
     with db() as c:execute(c,'SELECT 1')
     from server.vision import configuration
-    return jsonify(status='ok',version='1.1.0',application='NOIRA',database='supabase' if SUPABASE_DATABASE_URL else 'postgres',freeUnlocks=FREE_UNLOCKS,automaticLevelEnabled=configuration()['enabled'],shopBundleTemplates=len(SHOP_TEMPLATES))
+    return jsonify(status='ok',version='1.2.0',application='NOIRA',database='supabase' if SUPABASE_DATABASE_URL else 'postgres',freeUnlocks=FREE_UNLOCKS,automaticLevelEnabled=configuration()['enabled'],shopBundleTemplates=len(SHOP_TEMPLATES))
 @app.get('/')
 def index():return send_from_directory(WEB,'index.html' if getattr(g,'venue',None) else 'owner.html')
 @app.get('/designs.js')

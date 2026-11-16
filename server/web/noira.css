@@ -51,3 +51,5 @@ body>aside#sidebar{width:270px;background:#151719;border-color:#3c3b36;padding:3
 }
 
 .pos-totals strong [data-noira-money],.pos-card-result strong [data-noira-money]{font:inherit;color:inherit}
+/* Keep the installation shortcut out of account forms and confirmations. */
+body:has(.modal-backdrop)>.pwa-launcher{display:none!important}

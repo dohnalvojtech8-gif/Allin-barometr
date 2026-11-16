@@ -987,6 +987,28 @@ Všechny akce se vztahují k tomuto skladu.|All actions apply to this warehouse.
 V inventuře budou jen produkty tohoto skladu.|Only products from this warehouse will be counted.|Die Inventur enthält nur Produkte aus diesem Lager.
 Spočítejte položky. Před uložením zobrazíme rekapitulaci a manko.|Count the items. Review the summary and shortages before saving.|Zählen Sie die Artikel. Vor dem Speichern erscheinen Zusammenfassung und Fehlmengen.
 `.trim().split('\n'))add(...row.split('|'));
+ for(const row of `
+Vytvořit zaměstnanecký profil|Create employee profile|Mitarbeiterprofil erstellen
+Zadejte přihlašovací údaje zaměstnance.|Enter the employee’s sign-in details.|Geben Sie die Anmeldedaten des Mitarbeiters ein.
+Jméno|First name|Vorname
+Přihlašovací jméno|Username|Benutzername
+Vytvořit profil|Create profile|Profil erstellen
+Heslo musí mít alespoň 8 znaků. PIN tvoří přesně čtyři číslice a v tomto provozu musí být jedinečný.|The password needs at least 8 characters. The PIN must have exactly four digits and be unique within this venue.|Das Passwort benötigt mindestens 8 Zeichen. Die PIN muss genau vier Ziffern enthalten und in diesem Betrieb eindeutig sein.
+Po vytvoření můžete upravit oprávnění a přístup ke skladům.|After creation you can edit permissions and warehouse access.|Nach dem Erstellen können Sie Berechtigungen und Lagerzugriff bearbeiten.
+Zaměstnanecký profil je vytvořený|Employee profile created|Mitarbeiterprofil erstellt
+Zaměstnanec se může přihlásit zadaným heslem a na pracovním terminálu svým PINem.|The employee can sign in with the chosen password and use their PIN on the work terminal.|Der Mitarbeiter kann sich mit dem vergebenen Passwort anmelden und seine PIN am Arbeitsterminal verwenden.
+Heslo ani PIN se v přehledech nezobrazují.|Passwords and PINs are not displayed in lists.|Passwörter und PINs werden nicht in Übersichten angezeigt.
+Hotovo|Done|Fertig
+Nemáte účet? Požádejte majitele o vytvoření zaměstnaneckého profilu.|Need an account? Ask the owner to create an employee profile.|Noch kein Konto? Bitten Sie den Inhaber, ein Mitarbeiterprofil zu erstellen.
+SPRÁVA ZAMĚSTNANCŮ|EMPLOYEE MANAGEMENT|MITARBEITERVERWALTUNG
+Zaměstnanecké profily, oprávnění a aktivita na jednom místě.|Employee profiles, permissions and activity in one place.|Mitarbeiterprofile, Berechtigungen und Aktivitäten an einem Ort.
+Zatím nemáte zaměstnance. Vytvořte zaměstnanecký profil pro vybraný provoz.|No employees yet. Create an employee profile for the selected venue.|Noch keine Mitarbeiter. Erstellen Sie ein Mitarbeiterprofil für den gewählten Betrieb.
+PIN je připravený při vytvoření profilu. Oprávnění a přístup ke skladům můžete následně upravit.|The PIN is set when the profile is created. You can edit permissions and warehouse access afterwards.|Die PIN wird beim Erstellen des Profils festgelegt. Berechtigungen und Lagerzugriff können Sie danach bearbeiten.
+Spravovat běžné zaměstnanecké účty|Manage regular employee accounts|Reguläre Mitarbeiterkonten verwalten
+Zaměstnanecké profily, oprávnění k akcím a pracovní prostory.|Employee profiles, action permissions and workspaces.|Mitarbeiterprofile, Aktionsberechtigungen und Arbeitsbereiche.
+PIN musí obsahovat přesně čtyři číslice.|The PIN must contain exactly four digits.|Die PIN muss genau vier Ziffern enthalten.
+Tento PIN už v pracovním prostoru používá jiný zaměstnanec.|Another employee in this workspace already uses this PIN.|Ein anderer Mitarbeiter in diesem Arbeitsbereich verwendet diese PIN bereits.
+`.trim().split('\n'))add(...row.split('|'));
  function t(source){
   if(language==='cs')return source;
   const index=supported.indexOf(language),exact=dictionary.get(source);if(exact)return exact[index];

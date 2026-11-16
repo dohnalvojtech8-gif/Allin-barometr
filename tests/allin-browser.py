@@ -11,18 +11,20 @@ with sync_playwright() as p:
  page.locator('#owner-nav a').first.wait_for()
  assert page.locator('#owner-nav a').all_text_contents()==['◫Souhrnný přehled','▦Moje provozy','♧Uživatelé a přístupy','＋Vytvoření nového provozu','▥Porovnání provozů','◷Aktivita napříč provozy','⚙Nastavení majitele a účtu']
  suffix=uuid.uuid4().hex[:6]
+ new_venue_id=None
  for name in ['Bar na náměstí '+suffix,'Vinárna Pod věží '+suffix]:
   page.locator('#owner-nav a[href="#create"]').click()
   page.locator('#create-venue [name=name]').fill(name)
   page.locator('#create-venue [name=address]').fill('Praha')
   page.locator('#create-venue button').click()
-  page.wait_for_url('**/#venues');page.locator('.venue-card').filter(has_text=name).last.wait_for()
+  page.wait_for_url('**/#venues');page.locator('.venue-card').filter(has_text=name).last.wait_for();new_venue_id=page.locator('.venue-card').filter(has_text=name).last.locator('[data-enter]').get_attribute('data-enter')
  page.locator('#owner-nav a[href="#overview"]').click();page.locator('.hub-stats').wait_for()
  page.screenshot(path='/tmp/allin-owner-desktop.png',full_page=True)
- page.locator('#owner-nav a[href="#team"]').click();page.locator('[data-hub-invite]').click()
- page.locator('#hub-invite-form [name=label]').fill('První zaměstnanec')
- page.locator('#hub-invite-form button').click();page.get_by_text('Pozvánka je připravená').wait_for()
- page.locator('[data-auth-close]').click()
+ page.locator('#owner-nav a[href="#team"]').click();page.locator('[data-hub-create-employee]').click()
+ form=page.locator('#employee-form');form.locator('[name=venueId]').select_option(new_venue_id)
+ for name,value in {'firstName':'První','lastName':'Zaměstnanec','username':'employee_'+suffix,'password':'employee-test-password','pin':'7391'}.items():form.locator('[name='+name+']').fill(value)
+ form.locator('[type=submit]').click();page.get_by_role('heading',name='Zaměstnanecký profil je vytvořený').wait_for()
+ page.locator('[data-auth-close]').first.click()
  page.locator('#owner-nav a[href="#venues"]').click()
  page.locator('[data-enter]').first.click()
  page.wait_for_url('**/v/**/');page.locator('#app').get_by_text('Každý sklad.',exact=False).wait_for()
@@ -34,5 +36,5 @@ with sync_playwright() as p:
  assert page.evaluate('document.documentElement.scrollWidth<=window.innerWidth')
  page.locator('#owner-menu').click();page.locator('#owner-nav a[href="#activity"]').click();page.locator('#activity-events').wait_for()
  assert not errors,errors
- print('PASS: login, menu order, two venues, invitation, venue entry, catalog, comparison, mobile navigation and no JavaScript errors')
+ print('PASS: login, menu order, two venues, employee creation, venue entry, catalog, comparison, mobile navigation and no JavaScript errors')
  browser.close()

@@ -42,8 +42,7 @@ with sync_playwright() as p:
   page.goto(venue_url)
   page.locator('#auth-form').wait_for()
   results.append({'screen':'venue login','width':width,'minimumContrast':round(check(page,'venue'),2)})
-  page.locator('[data-auth-mode=register]').click()
-  results.append({'screen':'registration','width':width,'minimumContrast':round(check(page,'register'),2)})
+  assert page.locator('[data-auth-mode=register]').count()==0
   page.unroute(venue_url)
   page.unroute('**/api/me')
  assert not errors,errors

@@ -196,6 +196,17 @@ def register(app):
             data=response.get_json();data['venueUrl']=f'/v/{venue_id}/'
             return jsonify(data)
 
+    @app.post('/api/owner/venues/<venue_id>/members')
+    @authenticated(admin=True)
+    def create_member(venue_id):
+        from server.app import rate_limit
+        from server.employees import create_employee
+        venue=owned(venue_id);values=body()
+        rate_limit(['employee-create:'+g.user['id']],30)
+        with venue_context(venue),db() as c:
+            user=create_employee(c,values,venue['owner_id'],g.user['id'])
+        return jsonify(user=user,hasPin=True,venueUrl=f'/v/{venue_id}/'),201
+
     @app.post('/api/owner/venues/<venue_id>/members/<member_id>')
     @authenticated(admin=True)
     def update_member(venue_id,member_id):

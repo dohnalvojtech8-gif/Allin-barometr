@@ -101,3 +101,13 @@ CSV používá UTF-8, středník, čárku nebo tabulátor. Požadované sloupce:
 Tabulky `pos_connections`, `pos_days`, `pos_revisions`, `pos_imports` jsou v soukromém centrálním schématu; vznikají idempotentně při spuštění stejně jako zbytek tohoto projektu. RLS je zapnuté, přímá oprávnění `PUBLIC`, `anon`, `authenticated` odebraná. Do Supabase Data API se finanční tabulky nezpřístupňují; přístup vede výhradně přes autorizovaný backend.
 
 Ověření: `python -m pytest -q tests/test_pos.py` a `python tests/noira-languages-pos.py` (druhý pouze lokálně, se stejným účtem a serverem jako ostatní browser testy).
+
+## Zaměstnanecké profily
+
+Tlačítko **Vytvořit zaměstnanecký profil** nahrazuje pozvánky v centrální sekci Uživatelé a přístupy a ve správě uživatelů provozu. Majitel zadává jméno, příjmení, přihlašovací jméno, heslo a čtyřmístný PIN; v centrálním panelu navíc vybere provoz. Po vytvoření je účet ihned použitelný jménem/heslem a na spárovaném terminálu PINem. Pořadí hlavní nabídky se nemění. Formulář a potvrzení jsou také v angličtině a němčině.
+
+Server vytváří běžný zaměstnanecký účet s výchozími oprávněními a přístupem ke skladům majitele daného provozu. Majitel pak může rozsah upravit existujícím nastavením oprávnění a skladů. Vytvářet profily smí pouze majitel; oprávnění `users.manage` samo o sobě nepovoluje zakládání přihlašovacích údajů a PINů. Endpointy: `POST /api/owner/venues/<id>/members` v centrálním panelu a `POST /v/<id>/api/admin/users` uvnitř provozu.
+
+Založení účtu, připojení ke skladům, otisk PINu a audit probíhají atomicky. Přihlašovací jméno je jedinečné bez rozlišení velikosti písmen v rámci provozu. PIN je jedinečný v pracovním prostoru včetně PINu majitele; přidělení používá stejný transakční zámek jako dosavadní změny PINu. Heslo (8–128 znaků) i PIN (přesně čtyři ASCII číslice, včetně úvodní nuly) se ukládají pouze jako otisky scrypt. Ve výstupech, seznamu ani auditu nejsou hesla, PINy a jejich otisky. Založení zaměstnance nemění přihlášení majitele ani nevytváří zaměstnanci centrální účet. Historické API pozvánek zůstává pro kompatibilitu, nové rozhraní je nenabízí.
+
+Ověření: `python -m pytest -q tests/test_employees.py` a lokálně `python tests/noira-employee-browser.py`.

@@ -8,7 +8,7 @@ PERMISSIONS={
  'inventory.run':('Provádět a ukládat inventury',True),
  'inventory.adjust':('Opravovat uzavřené inventury',False),
  'catalog.unlock':('Odemykat alkoholické nápoje',True),
- 'users.manage':('Spravovat běžné uživatele a pozvánky',False),
+ 'users.manage':('Spravovat běžné zaměstnanecké účty',False),
  'work.inventory':('Spouštět inventury na pracovním terminálu',False),
  'stock.audit':('Číst historii všech skladových změn',False),
 }
