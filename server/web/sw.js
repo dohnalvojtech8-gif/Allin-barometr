@@ -12,7 +12,7 @@ self.addEventListener('push', event => {
   const url=new URL(value.url||'/',self.location.origin);
   event.waitUntil(self.registration.showNotification(String(value.title||'NOIRA'),{
     body:String(value.body||'Máte nové upozornění ve svém provozu.'),
-    icon:'/icons/icon-192.png',badge:'/icons/icon-192.png',
+    icon:'/icons/noira-logo.png',badge:'/icons/noira-logo.png',
     tag:String(value.tag||'noira'),data:{url:url.origin===self.location.origin?url.href:self.location.origin+'/'},
   }));
 });

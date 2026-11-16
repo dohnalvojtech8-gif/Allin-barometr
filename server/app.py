@@ -692,7 +692,7 @@ def pwa_style():return send_from_directory(WEB,'pwa.css')
 @app.get('/icons/<path:name>')
 def pwa_icon(name):return send_from_directory(WEB/'icons',name)
 @app.get('/favicon.ico')
-def favicon():return send_from_directory(WEB/'icons','icon-192.png',mimetype='image/png')
+def favicon():return send_from_directory(WEB/'icons','noira-logo.png',mimetype='image/png')
 from server.work import register as register_work
 register_work(app)
 
