@@ -71,3 +71,15 @@ Prohlížečový test: `python tests/allin-browser.py` (vyžaduje Playwright, Ch
 Nasazení na konkrétní Render a Supabase projekt je třeba ověřit po zadání skutečného připojení. Lokální SQLite testy neověřují síťové připojení ani oprávnění produkční databázové role.
 
 Původní dokumentace a známá omezení měření: [README-BAROMETR.md](README-BAROMETR.md), [dokumentace](dokumentace/). Platby zůstávají vypnuté a automatická AI analýza vyžaduje samostatnou konfiguraci stejně jako v původním Barometru.
+
+## PWA a oznámení
+
+Centrální panel i samostatné provozy mají manifest, ikonu a instalaci na plochu. Na iPhonu otevřete adresu v Safari → Sdílet → Přidat na plochu; pro Web Push je potřeba iOS 16.4+ a spuštění z plochy.
+
+V Nastavení → Oznámení si uživatel vybere uložené inventury/měření, zásoby pod minimem a pohyby zboží. Zapnutí a vypnutí platí pro konkrétní zařízení, účet a provoz. Centrální účet majitele může odebírat události ze všech svých provozů. Zkušební oznámení používá skutečné Web Push doručení. Přihlášení k push neprobíhá automaticky; uživatel musí stisknout tlačítko a povolit prohlížeč.
+
+Server uchovává VAPID klíče v soukromé databázi, do prohlížeče vrací jen veřejný klíč. Skladová změna ukládá událost ve stejné transakci do outboxu. Po úspěšném požadavku ji doručí omezený pracovní thread webové služby; přechodné chyby se zkoušejí znovu při dalších požadavcích (maximálně 3 pokusy během 24 hodin). Příjemci se kontrolují podle vlastníka, aktivního účtu, oprávnění a dostupných skladů. Expirovaná push připojení se odstraňují. Odhlášení odpojí push připojení pro aktuální účet/provoz na tomto zařízení.
+
+Ověření push logiky: `python -m pytest -q tests/test_notifications.py`. Doručení v testech je simulované; příjem na skutečném telefonu ověřuje uživatel tlačítkem Zkušební oznámení po udělení oprávnění.
+
+Ověření mobilního kontrastu: `python tests/noira-login-contrast.py` proti lokálnímu serveru.

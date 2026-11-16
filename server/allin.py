@@ -52,7 +52,7 @@ def install_context(app):
             g.venue=venue
             if request.path.startswith('/api/owner/') or request.path=='/api/owner':raise ApiError('Centrální panel otevřete mimo provoz.',403)
         elif request.path.startswith('/api/') and not (TEST_DB and os.environ.get('ALLIN_LEGACY_TEST_API')=='1'):
-            if request.path not in ('/api/login','/api/logout','/api/me','/api/password') and not request.path.startswith('/api/owner/'):
+            if request.path not in ('/api/login','/api/logout','/api/me','/api/password') and not request.path.startswith(('/api/owner/','/api/notifications')):
                 raise ApiError('Nejdříve vyberte provoz v centrálním panelu.',403)
 
     @app.after_request

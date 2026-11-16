@@ -8,12 +8,12 @@
   let pending;
   const launcher = document.createElement('button');
   launcher.className = 'pwa-launcher'; launcher.type = 'button';
-  launcher.textContent = '↓ Instalovat aplikaci';
+  launcher.textContent = '↓ Přidat NOIRU na plochu';
   launcher.setAttribute('aria-haspopup', 'dialog');
   const dialog = document.createElement('dialog');
   dialog.className = 'pwa-dialog';
   dialog.setAttribute('aria-labelledby', 'pwa-title');
-  dialog.innerHTML = `<h2 id="pwa-title">Aplikace na ploše</h2>
+  dialog.innerHTML = `<h2 id="pwa-title">NOIRA na ploše telefonu</h2>
     <p>Otevírejte aplikaci přímo z plochy s vlastní ikonou. Pro přihlášení a práci s daty potřebujete internet.</p>
     <button type="button" class="pwa-install" hidden>Instalovat</button>
     <h3>Android · Chrome</h3>

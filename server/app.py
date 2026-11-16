@@ -76,6 +76,8 @@ def audit(c,user_id,action,detail=''):
     execute(c,'INSERT INTO events (id,user_id,action,detail,created_at) VALUES (%s,%s,%s,%s,%s)',(uid(),user_id,action,detail[:240],time.time()))
 from server.work import TABLES as WORK_TABLES,store_scope,scoped_stock,merge_scoped_stock
 SCHEMA.extend(WORK_TABLES)
+from server.notifications import OUTBOX_SQL
+SCHEMA.append(OUTBOX_SQL)
 
 def init_db(seed_admins=True):
     with db() as c:
@@ -519,6 +521,8 @@ def change_password():
         audit(c,account['id'],'password_changed','Změna hesla')
     return jsonify(ok=True)
 def write_stock_changes(c,owner,before,after,revision):
+    from server.notifications import record_changes
+    record_changes(c,before,after)
     from server.stock import change_rows
     stores={r['id']:r['name'] for r in before.get('stores',[])+after['stores']}
     for r in change_rows(before,after):
@@ -709,6 +713,8 @@ def premium_theme():
 
 from server.allin import register as register_allin
 register_allin(app)
+from server.notifications import register as register_notifications
+register_notifications(app)
 
 @app.get('/noira.css')
 def noira_theme():return send_from_directory(WEB,'noira.css')
