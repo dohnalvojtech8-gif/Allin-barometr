@@ -129,6 +129,17 @@ def register(app):
                 execute(c,'REVOKE ALL ON '+table+' FROM PUBLIC')
                 if SUPABASE_DATABASE_URL:execute(c,'REVOKE ALL ON '+table+' FROM anon,authenticated')
 
+    # Existing venues predate the outbox; provision the additive table before serving them.
+    with db(central=True) as c:existing=allrows(c,'SELECT * FROM allin_venues')
+    from server.allin import venue_context
+    for venue in existing:
+        with app.app_context(),venue_context(venue),db() as c:
+            execute(c,OUTBOX_SQL)
+            if not TEST_DB:
+                execute(c,'ALTER TABLE notification_outbox ENABLE ROW LEVEL SECURITY')
+                execute(c,'REVOKE ALL ON notification_outbox FROM PUBLIC')
+                if SUPABASE_DATABASE_URL:execute(c,'REVOKE ALL ON notification_outbox FROM anon,authenticated')
+
     def scope():return g.venue['id'] if getattr(g,'venue',None) else 'owner'
     def profile(c):
         row=one(c,'SELECT preferences_json FROM notification_profiles WHERE user_id=%s AND scope=%s',(g.user['id'],scope()))
