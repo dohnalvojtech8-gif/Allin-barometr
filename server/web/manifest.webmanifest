@@ -5,10 +5,10 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#101211",
-  "theme_color": "#101211",
+  "background_color": "#111315",
+  "theme_color": "#111315",
   "lang": "cs",
-  "description": "Inventura a správa baru",
+  "description": "Skladové zásoby a inventury všech vašich provozů",
   "icons": [
     {
       "src": "/icons/icon-192.png",

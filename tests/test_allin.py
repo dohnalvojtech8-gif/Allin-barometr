@@ -140,3 +140,18 @@ def test_owner_password_can_change_from_each_venue(hub):
  assert client.post(pb+'/api/password',json={'oldPassword':'owner-next-password','newPassword':'owner-last-password'},headers=hb).status_code==200
  assert other.get('/api/me').status_code==401
  assert client.get('/api/me').status_code==200
+ assert client.post(pa+'/api/password',json={'oldPassword':'owner-last-password','newPassword':'4062'},headers=ha).status_code==200
+ assert other.post('/api/login',json={'username':owner,'password':'4062'}).status_code==200
+
+
+def test_summary_keeps_units_separate_and_omits_financial_fields(hub):
+ client,h,owner=hub;a=create(hub,'Jednotky');pa,ha=enter(hub,a)
+ base={'store':'main','category':'Zboží','cost':999,'min':0,'tare':0,'capacity':0,'density':1}
+ products=[{**base,'id':'piece','name':'Kusy','kind':'piece','unit':'ks'},{**base,'id':'weight','name':'Hmotnost','kind':'weight','unit':'kg'}]
+ counts=[{'id':'piece-count','inventoryId':'mixed','store':'main','product':'piece','qty':12,'at':'2025-01-01T12:00:00+00:00'},
+ {'id':'weight-count','inventoryId':'mixed','store':'main','product':'weight','qty':2.5,'at':'2025-01-01T12:00:00+00:00'}]
+ data={'stores':[{'id':'main','name':'Sklad'}],'products':products,'counts':counts,'moves':[],'draft':None,'barInventories':[]}
+ assert client.put(pa+'/api/stock',json={'revision':0,'data':data},headers=ha).status_code==200
+ summary=client.get('/api/owner/venues').json['venues'][0]
+ assert summary['quantities']=={'ks':12,'kg':2.5}
+ assert 'stockValue' not in summary and 'unpricedShortage' not in summary
