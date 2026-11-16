@@ -76,6 +76,8 @@ def audit(c,user_id,action,detail=''):
     execute(c,'INSERT INTO events (id,user_id,action,detail,created_at) VALUES (%s,%s,%s,%s,%s)',(uid(),user_id,action,detail[:240],time.time()))
 from server.work import TABLES as WORK_TABLES,store_scope,scoped_stock,merge_scoped_stock
 SCHEMA.extend(WORK_TABLES)
+from server.staff import POSITION_SQL
+SCHEMA.append(POSITION_SQL)
 from server.notifications import OUTBOX_SQL
 SCHEMA.append(OUTBOX_SQL)
 
@@ -83,6 +85,8 @@ def init_db(seed_admins=True):
     with db() as c:
         for sql in SCHEMA:execute(c,sql)
         columns={r['name'] for r in allrows(c,'PRAGMA table_info(users)')} if TEST_DB else {r['column_name'] for r in allrows(c,"SELECT column_name FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='users'")}
+        if 'position_id' not in columns:execute(c,'ALTER TABLE users ADD COLUMN position_id TEXT')
+        if 'permission_overrides_json' not in columns:execute(c,"ALTER TABLE users ADD COLUMN permission_overrides_json TEXT NOT NULL DEFAULT '{}'")
         if 'permissions_json' not in columns:execute(c,"ALTER TABLE users ADD COLUMN permissions_json TEXT NOT NULL DEFAULT '{}'")
         if 'stock_owner_id' not in columns:execute(c,'ALTER TABLE users ADD COLUMN stock_owner_id TEXT REFERENCES users(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED')
         if not TEST_DB:
@@ -96,7 +100,6 @@ def init_db(seed_admins=True):
             if name and password:
                 execute(c,"INSERT INTO users (id,username,username_key,first_name,last_name,password_hash,role,created_at) VALUES (%s,%s,%s,%s,%s,%s,'admin',%s) ON CONFLICT (username_key) DO NOTHING",(uid(),name,name.casefold(),name,'',password_hash(password),time.time()))
         execute(c,'DELETE FROM sessions WHERE expires_at < %s',(time.time(),))
-        execute(c,'DELETE FROM events WHERE created_at < %s',(time.time()-90*86400,))
         execute(c,'DELETE FROM rate_buckets WHERE started_at < %s',(time.time()-86400,))
 if not TEST_DB:
     with db(central=True) as c:
@@ -185,7 +188,7 @@ def authenticated(admin=False,bottles=False,permission=None):
         def wrapped(*args,**kwargs):
             token=request.cookies.get(cookie_name(),'')
             with db() as c:
-                row=one(c,"SELECT u.*,s.csrf,s.token_hash FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=%s AND s.expires_at>%s AND u.status='active'",(digest(token),time.time()))
+                row=one(c,"SELECT u.*,p.name AS position_name,s.csrf,s.token_hash FROM sessions s JOIN users u ON u.id=s.user_id LEFT JOIN staff_positions p ON p.id=u.position_id WHERE s.token_hash=%s AND s.expires_at>%s AND u.status='active'",(digest(token),time.time()))
                 if not row:raise ApiError('Přihlaste se prosím.',401)
                 if getattr(g,'venue',None) and row['role']=='admin':
                     # Owner entry is tied to a live central session on this browser.
@@ -194,7 +197,7 @@ def authenticated(admin=False,bottles=False,permission=None):
                     if not owner_session or owner_session['user_id']!=g.venue['owner_id'] or row['id']!=g.venue['owner_id']:raise ApiError('Přihlaste se do centrálního panelu majitele.',401)
                 if permission and not has_permission(row,permission):raise ApiError('K této akci nemáte oprávnění.',403)
                 if admin and row['role']!='admin':raise ApiError('Tato akce je dostupná pouze administrátorům.',403)
-                if bottles and permission!='catalog.unlock' and not has_permission(row,'inventory.run'):raise ApiError('Nemáte oprávnění provádět inventury.',403)
+                if bottles and permission!='catalog.unlock' and not (has_permission(row,'inventory.run') and has_permission(row,'inventory.bar')):raise ApiError('Nemáte oprávnění provádět inventury baru.',403)
                 if bottles and not (FREE_UNLOCKS or row['role']=='admin'):raise ApiError('Odemykání a práce s lahvemi je pro běžné účty zatím vypnutá.',403)
                 if request.method in ('POST','PUT','PATCH','DELETE') and not hmac.compare_digest(request.headers.get('X-CSRF-Token',''),row['csrf']):raise ApiError('Obnovte stránku a zkuste to znovu.',403)
                 if not row['last_seen'] or time.time()-row['last_seen']>45:execute(c,'UPDATE users SET last_seen=%s WHERE id=%s',(time.time(),row['id']))
@@ -203,7 +206,7 @@ def authenticated(admin=False,bottles=False,permission=None):
         return wrapped
     return decorator
 
-def public_user(u):return {**{k:u[k] for k in ('id','username','first_name','last_name','role','status','created_at','last_login','last_seen','login_count')},'permissions':effective_permissions(u),'stockOwnerId':u.get('stock_owner_id')}
+def public_user(u):return {**{k:u[k] for k in ('id','username','first_name','last_name','role','status','created_at','last_login','last_seen','login_count')},'permissions':effective_permissions(u),'stockOwnerId':u.get('stock_owner_id'),'positionId':u.get('position_id'),'positionName':u.get('position_name')}
 def rate_limit(keys,max_attempts=8,window=900):
     now=time.time()
     with db() as c:
@@ -225,13 +228,18 @@ def login():
     rate_limit(['login-name:'+username.casefold()],5);rate_limit(['login-ip:'+client_ip()],40)
     with db() as c:
         u=one(c,'SELECT * FROM users WHERE username_key=%s',(username.casefold(),))
-        ok=password_ok(password,u['password_hash'] if u else DUMMY)
-        if not u or not ok or u['status']!='active':
-            if u:audit(c,u['id'],'login_failed','Neúspěšný pokus o přihlášení')
-            # Return instead of raising so the attempted-login audit is committed.
-            return jsonify(error='Nesprávné přihlašovací údaje nebo zablokovaný účet.'),401
-        execute(c,'DELETE FROM rate_buckets WHERE bucket=%s',(digest('login-name:'+username.casefold()),))
-        return session_response(c,u)
+        valid=password_ok(password,u['password_hash'] if u else DUMMY) and u is not None and u['status']=='active'
+        if valid:
+            execute(c,'DELETE FROM rate_buckets WHERE bucket=%s',(digest('login-name:'+username.casefold()),))
+            return session_response(c,u)
+        if u:audit(c,u['id'],'login_failed','Neúspěšný pokus o přihlášení')
+    if not getattr(g,'venue',None):
+        from server.staff import employee_login
+        response=employee_login(data,username,password)
+        if response is not None:
+            with db(central=True) as c:execute(c,'DELETE FROM rate_buckets WHERE bucket=%s',(digest('login-name:'+username.casefold()),))
+            return response
+    return jsonify(error='Nesprávné přihlašovací údaje nebo zablokovaný účet.'),401
 @app.post('/api/register')
 def register():
     data=body();first=textfield(data,'firstName');last=textfield(data,'lastName');username=textfield(data,'username',3,32);password=data.get('password','');code=textfield(data,'inviteCode',8,100).upper().replace(' ','')
@@ -245,7 +253,10 @@ def register():
         count=execute(c,'UPDATE invitations SET used_count=used_count+1 WHERE id=%s AND revoked=0 AND expires_at>%s AND used_count<max_uses',(invite['id'],time.time())).rowcount
         if count!=1:raise ApiError('Pozvánka je neplatná, použitá nebo vypršela.')
         id=uid();execute(c,"INSERT INTO users (id,username,username_key,first_name,last_name,password_hash,role,created_at) VALUES (%s,%s,%s,%s,%s,%s,'user',%s)",(id,username,username.casefold(),first,last,password_hash(password),time.time()))
-        if getattr(g,'venue',None):execute(c,'UPDATE users SET stock_owner_id=%s WHERE id=%s',(g.venue['owner_id'],id))
+        if getattr(g,'venue',None):
+            execute(c,'UPDATE users SET stock_owner_id=%s WHERE id=%s',(g.venue['owner_id'],id))
+            from server.staff import index_employee
+            index_employee(c,{'id':id,'username_key':username.casefold()})
         execute(c,'INSERT INTO invitation_uses (id,invite_id,user_id,used_at) VALUES (%s,%s,%s,%s)',(uid(),invite['id'],id,time.time()))
         audit(c,id,'registered','Registrace pomocí pozvánky')
         return session_response(c,one(c,'SELECT * FROM users WHERE id=%s',(id,)))
@@ -263,9 +274,11 @@ def logout():
     r=jsonify(ok=True);r.delete_cookie(cookie_name(),path=request.script_root or '/');return r
 @app.get('/api/catalog')
 @authenticated()
-def catalog():return jsonify(CATALOG)
+def catalog():
+    if not (has_permission(g.user,'catalog.view') or (has_permission(g.user,'inventory.run') and has_permission(g.user,'inventory.bar'))):raise ApiError('Nemáte oprávnění otevřít katalog.',403)
+    return jsonify(CATALOG)
 @app.get('/api/shop')
-@authenticated()
+@authenticated(permission='catalog.view')
 def shop_offers():
     current=choose_week(SHOP_TEMPLATES)
     with db() as c:owned={r['product_id'] for r in allrows(c,'SELECT product_id FROM unlocks WHERE user_id=%s',(g.user['id'],))}
@@ -298,6 +311,7 @@ def unlock():
 @app.get('/api/products/<id>')
 @authenticated()
 def product(id):
+    if not (has_permission(g.user,'catalog.view') or (has_permission(g.user,'inventory.run') and has_permission(g.user,'inventory.bar'))):raise ApiError('Nemáte oprávnění otevřít produkt.',403)
     if id not in PRODUCTS:raise ApiError('Produkt neexistuje.',404)
     with db() as c:
         if not (FREE_UNLOCKS or g.user['role']=='admin') or not one(c,'SELECT product_id FROM unlocks WHERE user_id=%s AND product_id=%s',(g.user['id'],id)):raise ApiError('Nejdříve odemkněte produkt.',403)
@@ -306,6 +320,7 @@ def product(id):
 @app.get('/api/barcode/<code>')
 @authenticated()
 def barcode_lookup(code):
+    if not (has_permission(g.user,'stock.edit') or (has_permission(g.user,'inventory.run') and has_permission(g.user,'inventory.bar'))):raise ApiError('Nemáte oprávnění vyhledávat produkty.',403)
     if not re.fullmatch(r'(?:[0-9]{8}|[0-9]{12,14})',code):raise ApiError('Neplatný čárový kód.')
     digits=[int(x) for x in code]
     if (sum(digits[-2::-2])*3+sum(digits[-3::-2])+digits[-1])%10:raise ApiError('Nesouhlasí kontrolní číslice kódu.')
@@ -381,6 +396,7 @@ def put_scan_photo(photo_id):
 @authenticated()
 def get_scan_photo(photo_id):
     import base64
+    if not (has_permission(g.user,'inventory.history') or (has_permission(g.user,'inventory.run') and has_permission(g.user,'inventory.bar'))):raise ApiError('Nemáte oprávnění prohlížet snímky inventur.',403)
     with db() as c:photo=one(c,'SELECT jpeg FROM scan_photos WHERE id=%s AND user_id=%s',(photo_id,g.user['id']))
     if not photo:raise ApiError('Snímek nebyl nalezen.',404)
     response=make_response(base64.b64decode(photo['jpeg'].split(',',1)[1]));response.headers['Content-Type']='image/jpeg';response.headers['Cache-Control']='private, no-store';return response
@@ -390,7 +406,8 @@ def get_scan_photo(photo_id):
 def put_state():
     data=body();clean={}
     old_state=json.loads(g.user['state_json'])
-    if not has_permission(g.user,'inventory.run') and any(data.get(k,old_state.get(k))!=old_state.get(k) for k in ('rows','records','inventoryPlan')):raise ApiError('Nemáte oprávnění provádět inventury.',403)
+    clean.update({k:old_state[k] for k in ('cycle','closing') if k in old_state})
+    if not (has_permission(g.user,'inventory.run') and has_permission(g.user,'inventory.bar')) and any(data.get(k,old_state.get(k))!=old_state.get(k) for k in ('rows','records','inventoryPlan')):raise ApiError('Nemáte oprávnění provádět inventury.',403)
     for key in ('cycle','closing'):
         if key in data:clean[key]=data[key]
     if clean.get('cycle','Měsíční') not in ('Denní','Týdenní','Měsíční'):raise ApiError('Neplatný cyklus.')
@@ -402,7 +419,7 @@ def put_state():
     if not (FREE_UNLOCKS or g.user['role']=='admin') and plan['entries']:raise ApiError('Inventura zatím není pro uživatele povolená.',403)
     if not (FREE_UNLOCKS or g.user['role']=='admin') and (data.get('rows') or data.get('records')):raise ApiError('Evidence lahví zatím není pro uživatele povolená.',403)
     if FREE_UNLOCKS or g.user['role']=='admin':
-        rows=data.get('rows',[]);records=data.get('records',[])
+        rows=data.get('rows',old.get('rows',[]));records=data.get('records',old.get('records',[]))
         if not isinstance(rows,list) or len(rows)>500 or not isinstance(records,list) or len(records)>3000:raise ApiError('Příliš mnoho záznamů.')
         with db() as c:ids={r['product_id'] for r in allrows(c,'SELECT product_id FROM unlocks WHERE user_id=%s',(g.user['id'],))}
         seen=set()
@@ -416,6 +433,19 @@ def put_state():
             if not isinstance(row.get('label'),str) or len(row['label'])>80:raise ApiError('Neplatné označení lahve.')
         for r in records:
             if not isinstance(r,dict) or r.get('productId') not in ids or type(r.get('ml')) not in (int,float):raise ApiError('Neplatná historie.')
+        managed={'actorId','actorName','actorUsername','recordedAt','at'}
+        previous=old.get('records',[])
+        if g.user['role']!='admin':
+            if len(records)<len(previous) or any({k:v for k,v in r.items() if k not in managed}!={k:v for k,v in records[i].items() if k not in managed} for i,r in enumerate(previous)):
+                raise ApiError('Historii může upravovat nebo mazat pouze majitel.',403)
+        for i,record in enumerate(records):
+            if i<len(previous):
+                for key in managed:
+                    if key in previous[i]:record[key]=previous[i][key]
+                    else:record.pop(key,None)
+            else:
+                record.update(actorId=g.user['id'],actorName=(g.user['first_name']+' '+g.user['last_name']).strip() or g.user['username'],actorUsername=g.user['username'],recordedAt=time.time())
+                if g.user['role']!='admin':record['at']=int(time.time()*1000)
         entry_ids=set()
         for entry in plan['entries']:
             if not isinstance(entry,dict) or not isinstance(entry.get('id'),str) or not re.fullmatch(r'[a-zA-Z0-9-]{1,48}',entry['id']) or entry['id'] in entry_ids:raise ApiError('Neplatná položka plánu.')
@@ -429,8 +459,10 @@ def put_state():
     else:clean.update(rows=[],records=[])
     clean['inventoryPlan']=plan
     with db() as c:
-        execute(c,'UPDATE users SET state_json=%s WHERE id=%s',(json.dumps(clean,ensure_ascii=False),g.user['id']))
+        changed=execute(c,'UPDATE users SET state_json=%s WHERE id=%s AND state_json=%s',(json.dumps(clean,ensure_ascii=False),g.user['id'],g.user['state_json'])).rowcount
+        if changed!=1:raise ApiError('Inventura byla mezitím změněna. Obnovte stránku a změnu zopakujte.',409)
         if clean.get('rows')!=old.get('rows') or clean.get('records')!=old.get('records'):audit(c,g.user['id'],'inventory_saved','Uložení inventury')
+        elif clean.get('inventoryPlan')!=old.get('inventoryPlan'):audit(c,g.user['id'],'inventory_plan_changed','Změna pořadí nebo průběhu inventury')
         elif clean.get('cycle')!=old.get('cycle') or clean.get('closing')!=old.get('closing'):audit(c,g.user['id'],'settings_changed','Změna nastavení')
     return jsonify(ok=True)
 @app.post('/api/activity')
@@ -458,7 +490,7 @@ def employee_create():
 @authenticated(permission='users.manage')
 def users_list():
     with db() as c:
-        users=allrows(c,'SELECT id,username,first_name,last_name,role,status,created_at,last_login,last_seen,login_count,permissions_json,stock_owner_id FROM users ORDER BY created_at DESC')
+        users=allrows(c,'SELECT u.id,u.username,u.first_name,u.last_name,u.role,u.status,u.created_at,u.last_login,u.last_seen,u.login_count,u.permissions_json,u.stock_owner_id,u.position_id,p.name AS position_name FROM users u LEFT JOIN staff_positions p ON p.id=u.position_id ORDER BY u.created_at DESC')
         counts={r['user_id']:r['n'] for r in allrows(c,'SELECT user_id,COUNT(*) AS n FROM events WHERE created_at>%s GROUP BY user_id',(time.time()-7*86400,))}
         for u in users:
             u['activity7d']=counts.get(u['id'],0);u['permissions']=effective_permissions(u);u['stockOwnerId']=u.pop('stock_owner_id',None);u.pop('permissions_json',None)
@@ -468,7 +500,7 @@ def users_list():
 def user_detail(id):
     limit=min(max(request.args.get('limit',100,type=int),1),200);offset=max(request.args.get('offset',0,type=int),0)
     with db() as c:
-        u=one(c,'SELECT * FROM users WHERE id=%s',(id,))
+        u=one(c,'SELECT u.*,p.name AS position_name FROM users u LEFT JOIN staff_positions p ON p.id=u.position_id WHERE u.id=%s',(id,))
         if not u:raise ApiError('Účet neexistuje.',404)
         total=one(c,'SELECT COUNT(*) AS n FROM events WHERE user_id=%s',(id,))['n']
         events=allrows(c,'SELECT id,action,detail,created_at FROM events WHERE user_id=%s ORDER BY created_at DESC LIMIT %s OFFSET %s',(id,limit,offset))
@@ -504,7 +536,7 @@ def user_status(id):
         execute(c,'UPDATE users SET status=%s WHERE id=%s',(status,id));execute(c,'DELETE FROM sessions WHERE user_id=%s',(id,));audit(c,g.user['id'],'user_status_changed',('Zablokování' if status=='suspended' else 'Obnovení')+' účtu '+target['username'])
     return jsonify(ok=True)
 @app.delete('/api/admin/users/<id>')
-@authenticated(permission='users.manage')
+@authenticated(admin=True)
 def user_delete(id):
     confirmation=body().get('confirmation')
     with db() as c:
@@ -512,6 +544,9 @@ def user_delete(id):
         if not target:raise ApiError('Účet neexistuje.',404)
         if target['role']=='admin':raise ApiError('Administrátory zde nelze smazat.',403)
         if confirmation!=target['username']:raise ApiError('Pro potvrzení zadejte přesné uživatelské jméno.')
+        if getattr(g,'venue',None):
+            from server.staff import directory_table
+            execute(c,'DELETE FROM '+directory_table(c)+' WHERE venue_id=%s AND user_id=%s',(g.venue['id'],id))
         execute(c,'DELETE FROM users WHERE id=%s',(id,));audit(c,g.user['id'],'user_deleted','Odstranění testovacího účtu a jeho záznamů')
     return jsonify(ok=True)
 @app.post('/api/password')
@@ -554,7 +589,7 @@ def stock_latest_changes(c,owner,data):
 @app.route('/api/stock',methods=['GET','PUT'])
 @authenticated(permission='stock.view')
 def stock_document():
-    from server.stock import validate_stock, StockValidationError, required_permissions, prepare_counts, validate_active_changes
+    from server.stock import validate_stock, StockValidationError, required_permissions, prepare_counts, validate_active_changes,attribute_records
     owner_id=g.user.get('stock_owner_id') or g.user['id']
     if request.method=='GET':
         with db() as c:
@@ -581,7 +616,7 @@ def stock_document():
             if not has_permission(g.user,permission):raise ApiError('K této změně nemáte oprávnění: '+PERMISSIONS[permission][0]+'.',403)
         try:validate_active_changes(old,clean)
         except StockValidationError as e:raise ApiError(str(e))
-        clean=prepare_counts(old,clean)
+        clean=prepare_counts(old,attribute_records(old,clean,g.user))
         changed=execute(c,'UPDATE stock_documents SET data_json=%s,revision=revision+1,updated_at=%s WHERE user_id=%s AND revision=%s',(json.dumps(clean,ensure_ascii=False),time.time(),owner_id,revision)).rowcount
         if changed!=1:raise ApiError('Sklad byl změněn na jiném zařízení. Obnovte stránku.',409)
         write_stock_changes(c,owner_id,old,clean,revision+1)
@@ -630,6 +665,8 @@ def user_permissions(id):
         target=one(c,'SELECT * FROM users WHERE id=%s',(id,))
         if not target:raise ApiError('Účet neexistuje.',404)
         if target['role']=='admin':raise ApiError('Oprávnění majitele nelze omezit.',403)
+        from server.staff import set_access,UNCHANGED
+        permissions=set_access(c,target,permissions,input_data.get('positionId',UNCHANGED))
         previous=effective_permissions(target)
         owner_id=input_data.get('stockOwnerId',target.get('stock_owner_id')) or None
         if owner_id is not None:
@@ -657,7 +694,7 @@ def stock_script():return send_from_directory(WEB,'stock.js')
 def health():
     with db() as c:execute(c,'SELECT 1')
     from server.vision import configuration
-    return jsonify(status='ok',version='1.2.0',application='NOIRA',database='supabase' if SUPABASE_DATABASE_URL else 'postgres',freeUnlocks=FREE_UNLOCKS,automaticLevelEnabled=configuration()['enabled'],shopBundleTemplates=len(SHOP_TEMPLATES))
+    return jsonify(status='ok',version='1.3.0',application='NOIRA',database='supabase' if SUPABASE_DATABASE_URL else 'postgres',freeUnlocks=FREE_UNLOCKS,automaticLevelEnabled=configuration()['enabled'],shopBundleTemplates=len(SHOP_TEMPLATES))
 @app.get('/')
 def index():return send_from_directory(WEB,'index.html' if getattr(g,'venue',None) else 'owner.html')
 @app.get('/designs.js')
@@ -727,6 +764,8 @@ from server.notifications import register as register_notifications
 register_notifications(app)
 from server.pos import register as register_pos
 register_pos(app)
+from server.staff import register as register_staff
+register_staff(app)
 
 @app.get('/noira.css')
 def noira_theme():return send_from_directory(WEB,'noira.css')
@@ -734,5 +773,10 @@ def noira_theme():return send_from_directory(WEB,'noira.css')
 
 @app.get('/i18n.js')
 def i18n_script():return send_from_directory(WEB,'i18n.js')
+
+
+
+@app.get('/team.js')
+def team_script():return send_from_directory(WEB,'team.js')
 
 if __name__=='__main__':app.run(host='0.0.0.0',port=int(os.environ.get('PORT','10000')))

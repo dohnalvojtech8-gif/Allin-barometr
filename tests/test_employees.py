@@ -19,7 +19,8 @@ def test_create_login_and_terminal_without_invitation(hub):
  response=client.post(url,json={**data,'role':'admin','permissions':{'users.manage':True}},headers=h)
  assert response.status_code==201,response.json
  user=response.json['user'];uid=user['id']
- assert user['role']=='user' and user['stockOwnerId']==owner and not user['permissions']['users.manage']
+ assert user['role']=='user' and user['stockOwnerId']==owner and user['permissions']['users.manage']
+ assert not user['permissions']['inventory.adjust']
  assert response.json['hasPin'] and response.json['venueUrl']==prefix+'/'
  assert client.get('/api/me').json['user']['id']==owner
  assert client.get(prefix+'/api/me').json['user']['id']==owner

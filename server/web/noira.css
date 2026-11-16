@@ -53,3 +53,5 @@ body>aside#sidebar{width:270px;background:#151719;border-color:#3c3b36;padding:3
 .pos-totals strong [data-noira-money],.pos-card-result strong [data-noira-money]{font:inherit;color:inherit}
 /* Keep the installation shortcut out of account forms and confirmations. */
 body:has(.modal-backdrop)>.pwa-launcher{display:none!important}
+
+.staff-positions-list{display:grid;gap:12px;margin:20px 0}.staff-positions-list>div{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:16px;border:1px solid var(--border,#42413b);border-radius:14px}.staff-permission-options{margin:18px 0}.staff-permission-options summary{cursor:pointer;font-size:18px;padding:12px 0}.staff-permission-options .permission-line,#position-form .permission-line{display:flex;align-items:center;gap:12px;padding:12px 0;font-size:17px}.staff-permission-options input[type=checkbox],#position-form input[type=checkbox]{width:22px;height:22px;flex-shrink:0}#staff-positions select{max-width:100%}

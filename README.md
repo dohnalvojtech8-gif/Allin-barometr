@@ -111,3 +111,13 @@ Server vytváří běžný zaměstnanecký účet s výchozími oprávněními a
 Založení účtu, připojení ke skladům, otisk PINu a audit probíhají atomicky. Přihlašovací jméno je jedinečné bez rozlišení velikosti písmen v rámci provozu. PIN je jedinečný v pracovním prostoru včetně PINu majitele; přidělení používá stejný transakční zámek jako dosavadní změny PINu. Heslo (8–128 znaků) i PIN (přesně čtyři ASCII číslice, včetně úvodní nuly) se ukládají pouze jako otisky scrypt. Ve výstupech, seznamu ani auditu nejsou hesla, PINy a jejich otisky. Založení zaměstnance nemění přihlášení majitele ani nevytváří zaměstnanci centrální účet. Historické API pozvánek zůstává pro kompatibilitu, nové rozhraní je nenabízí.
 
 Ověření: `python -m pytest -q tests/test_employees.py` a lokálně `python tests/noira-employee-browser.py`.
+
+## Pozice, oprávnění a zaměstnanecké přihlášení (1.3)
+
+Ve stejné sekci týmu majitel spravuje pozice pro vybraný provoz. Výchozí názvy jsou Zaměstnanec, Kuchař, Číšník a Manager; jejich oprávnění si nastavuje majitel. Nový profil dostane vybranou pozici a může mít individuální výjimky. Uložení změny pozice aktualizuje přiřazené profily, zachová jejich výjimky a při změně práv ukončí přihlášení. Pozice ani účty se mezi provozy nesdílejí. Seznamy týmů a profil zobrazují název pozice.
+
+Soukromý centrální adresář směruje zaměstnanecké přihlášení z hlavní adresy do správného provozu. Existující účty se při startu zaindexují bez změny hesel a PINů. Pokud stejným údajům odpovídá více provozů, zobrazí se výběr pouze po ověření hesla; zaměstnanec tím nezíská centrální účet ani přístup jinam. Adresář a tabulky pozic mají RLS a odebraná veřejná oprávnění stejně jako ostatní soukromá data.
+
+Oprávnění zvlášť pokrývají barové a skladové inventury, historii, katalog, ověřenou databázi, přehledy, příjmy, výdeje a správu. Zakázané funkce se skryjí a zápisy kontroluje server. Na osobním profilu není u inventur další výzva k PINu. Na sdíleném terminálu zůstává PIN identifikací zaměstnance. Nové inventury a pohyby získávají autora a čas ze serveru; zaměstnanci nesmějí přepisovat ani mazat uzavřené záznamy, ani pokud stará data obsahují `inventory.adjust: true`. Opravy historie jsou vyhrazené majiteli. Souběžný zápis nepřepisuje novější inventuru a audit aktivity se již automaticky nemaže po 90 dnech.
+
+Ověření: `python -m pytest -q`, `python tests/noira-employee-browser.py`, `python tests/noira-staff-browser.py` (poslední dva pouze proti lokální testovací aplikaci).

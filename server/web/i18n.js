@@ -6,6 +6,25 @@ window.NoiraI18n=(()=>{
  const dictionary=new Map(),lowercase=new Map(),textSources=new WeakMap(),attributeSources=new WeakMap();
  function add(source,en,de){dictionary.set(source,[source,en,de]);lowercase.set(source.toLocaleLowerCase('cs'),[source,en,de])}
  const copy=`
+Pozice|Position|Position
+Oprávnění zaměstnance|Employee permissions|Mitarbeiterberechtigungen
+Pozice a přednastavená oprávnění|Positions and permission presets|Positionen und Berechtigungsvorlagen
+Připravte pozice pro zaměstnance jednotlivých provozů.|Set up employee positions for each venue.|Richten Sie Mitarbeiterpositionen für jeden Betrieb ein.
+Pozice přednastaví oprávnění. Jednotlivé výjimky můžete upravit pro tohoto zaměstnance.|The position sets default permissions. You can change individual exceptions for this employee.|Die Position legt Standardberechtigungen fest. Individuelle Ausnahmen können Sie für diesen Mitarbeiter ändern.
+Historii může upravovat nebo mazat pouze majitel.|Only the owner can edit or delete history.|Nur der Inhaber kann den Verlauf bearbeiten oder löschen.
+Upravit pozici|Edit position|Position bearbeiten
+Nová pozice|New position|Neue Position
+＋ Nová pozice|＋ New position|＋ Neue Position
+Název pozice|Position name|Positionsname
+Uložit pozici|Save position|Position speichern
+Změny oprávnění pozice se promítnou zaměstnancům. Jejich individuální výjimky zůstávají zachované.|Position permission changes apply to assigned employees. Their individual exceptions are preserved.|Änderungen der Positionsberechtigungen gelten für zugewiesene Mitarbeiter. Ihre individuellen Ausnahmen bleiben erhalten.
+Inventury baru a měření lahví|Bar inventories and bottle measurements|Barinventuren und Flaschenmessungen
+Inventury skladů a vážení zboží|Warehouse inventories and weighing goods|Lagerinventuren und Warenwiegen
+Prohlížet historii inventur|View inventory history|Inventurverlauf anzeigen
+Prohlížet katalog a knihovnu lahví|View bottle catalog and library|Flaschenkatalog und Bibliothek anzeigen
+Prohlížet ověřenou databázi produktů|View verified product database|Geprüfte Produktdatenbank anzeigen
+Prohlížet porovnání a přehledy|View comparisons and reports|Vergleiche und Berichte anzeigen
+Vyberte svůj provoz.|Select your venue.|Wählen Sie Ihren Betrieb.
 Jazyk|Language|Sprache
 Přihlášení|Sign in|Anmeldung
 Registrace|Register|Registrierung

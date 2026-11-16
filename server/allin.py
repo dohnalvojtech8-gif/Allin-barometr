@@ -182,7 +182,7 @@ def register(app):
         members=[]
         for venue in rows:
             with venue_context(venue),db() as c:
-                for user in allrows(c,"SELECT * FROM users WHERE role='user' ORDER BY created_at"):
+                for user in allrows(c,"SELECT u.*,p.name AS position_name FROM users u LEFT JOIN staff_positions p ON p.id=u.position_id WHERE u.role='user' ORDER BY u.created_at"):
                     members.append({**public_user(user),'venueId':venue['id'],'venueName':venue['name']})
         return jsonify(members=members,permissions={k:v[0] for k,v in PERMISSIONS.items()})
 
@@ -216,7 +216,8 @@ def register(app):
         with venue_context(venue),db() as c:
             user=one(c,"SELECT * FROM users WHERE id=%s AND role='user'",(member_id,))
             if not user:raise ApiError('Zaměstnanec neexistuje.',404)
-            if permissions is not None:execute(c,'UPDATE users SET permissions_json=%s WHERE id=%s',(json.dumps(permissions),member_id))
+            from server.staff import set_access,UNCHANGED
+            if permissions is not None or 'positionId' in values:set_access(c,user,permissions,values.get('positionId',UNCHANGED))
             if status is not None:execute(c,'UPDATE users SET status=%s WHERE id=%s',(status,member_id))
             execute(c,'DELETE FROM sessions WHERE user_id=%s',(member_id,))
             execute(c,'DELETE FROM work_sessions WHERE user_id=%s',(member_id,))

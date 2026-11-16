@@ -110,6 +110,11 @@ def required_permissions(before,after):
     for r in after['moves']:
         if old_moves.get(r['id'])!=r:result.add('stock.receive' if r['id'] not in old_moves and r['reason'] in ('Příjem','Vratka') and r['qty']>0 else 'stock.move')
     if set(old_moves)-{r['id'] for r in after['moves']}:result.add('stock.move')
+    old_bars={r['id']:r for r in before.get('barInventories',[])};new_bars={r['id']:r for r in after.get('barInventories',[])}
+    new_moves={r['id']:r for r in after['moves']}
+    if any(new_moves.get(k)!=v for k,v in old_moves.items()) or any(new_bars.get(k)!=v for k,v in old_bars.items()):result.add('inventory.adjust')
+    if before.get('draft')!=after.get('draft') or any(r['id'] not in old_counts and r.get('kind','warehouse')=='warehouse' for r in after['counts']):result.add('inventory.warehouse')
+    if before.get('barDraft')!=after.get('barDraft') or before.get('barInventories',[])!=after.get('barInventories',[]) or any(r['id'] not in old_counts and r.get('kind')=='bar' for r in after['counts']):result.add('inventory.bar')
     return result
 
 def change_rows(before,after):
@@ -124,7 +129,7 @@ def change_rows(before,after):
             row=b or a;sid=row.get('store','') if collection!='stores' else key
             label=row.get('name') or row.get('productName') or products.get(row.get('product'),{}).get('name') or row.get('label') or stores.get(sid) or kind
             for field in sorted(set(a or {})|set(b or {})):
-                if field in ('id','inventoryId','deliveryId','transferId','photoId'):continue
+                if field in ('id','inventoryId','deliveryId','transferId','photoId','actorId','actorName','actorUsername','recordedAt'):continue
                 if field in ('at','product','store','expected','productName','unit','cost') and collection in ('counts','moves'):continue
                 av=(a or {}).get(field);bv=(b or {}).get(field)
                 if av!=bv:
@@ -156,3 +161,21 @@ def validate_active_changes(before,after):
         for row in after[collection]:
             if row.get('store') in archived and old.get(row['id'])!=row:
                 raise StockValidationError('Odstraněný sklad nejdříve obnovte; nelze do něj zapisovat nové změny.')
+
+
+def attribute_records(before,after,actor):
+    """Freeze historical authors and derive new authors from the authenticated session."""
+    from datetime import timezone
+    now=datetime.now(timezone.utc);name=(actor.get('first_name','')+' '+actor.get('last_name','')).strip() or actor['username']
+    fields={'actorId':actor['id'],'actorName':name,'actorUsername':actor['username'],'recordedAt':now.timestamp()}
+    for key in ('counts','moves','barInventories'):
+        old={r['id']:r for r in before.get(key,[])}
+        for row in after.get(key,[]):
+            if row['id'] in old:
+                for field in fields:
+                    if field in old[row['id']]:row[field]=old[row['id']][field]
+                    else:row.pop(field,None)
+            else:
+                row.update(fields)
+                if actor['role']!='admin':row['at']=now.isoformat()
+    return after

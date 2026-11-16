@@ -113,7 +113,9 @@ def register(app):
         return s
 
     def save(c,old,new,revision):
-        try:new=prepare_counts(old,validate_stock(new))
+        try:
+            from server.stock import attribute_records
+            new=prepare_counts(old,attribute_records(old,validate_stock(new),g.user))
         except StockValidationError as e:raise ApiError(str(e))
         owner=g.work_device['owner_id']
         execute(c,'INSERT INTO stock_documents (user_id,revision,data_json,updated_at) VALUES (%s,0,%s,%s) ON CONFLICT (user_id) DO NOTHING',(owner,json.dumps(old),time.time()))
@@ -257,7 +259,7 @@ def register(app):
     @app.post('/api/work/inventory')
     @worker('inventory.run')
     def inventory():
-        if not has_permission(g.user,'work.inventory'):raise ApiError('Nemáte zvláštní oprávnění k inventuře v pracovním režimu.',403)
+        if not has_permission(g.user,'work.inventory') or not has_permission(g.user,'inventory.warehouse'):raise ApiError('Nemáte zvláštní oprávnění k inventuře v pracovním režimu.',403)
         v=body();values=v.get('values');operation=v.get('operationId')
         if not isinstance(values,dict) or not values or not isinstance(operation,str) or not re.fullmatch(r'[a-zA-Z0-9-]{10,100}',operation):raise ApiError('Vyplňte položky inventury.')
         if any(type(q) not in (int,float) or not math.isfinite(q) or not 0<=q<=1e12 for q in values.values()):raise ApiError('Inventurní množství musí být nezáporné číslo.')

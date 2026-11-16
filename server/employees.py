@@ -8,6 +8,11 @@ def create_employee(connection, values, owner_id, actor_id):
     from server.app import (ApiError, allrows, audit, execute, one, password_hash,
                             password_ok, public_user, textfield, uid)
 
+    from server.staff import assigned_position,validate_permissions,index_employee,set_access
+    # Serialize position assignment with owner edits to position presets.
+    execute(connection,'UPDATE users SET last_seen=last_seen WHERE id=%s',(owner_id,))
+    position=assigned_position(connection,values.get('positionId') or 'zamestnanec')
+    permissions=validate_permissions(values.get('permissions',json.loads(position['permissions_json'])))
     first = textfield(values, 'firstName', 1, 64)
     last = textfield(values, 'lastName', 1, 64)
     username = textfield(values, 'username', 3, 32)
@@ -34,13 +39,16 @@ def create_employee(connection, values, owner_id, actor_id):
 
     user_id = uid()
     inserted = execute(connection, """INSERT INTO users
-        (id,username,username_key,first_name,last_name,password_hash,role,created_at,stock_owner_id,permissions_json)
-        VALUES (%s,%s,%s,%s,%s,%s,'user',%s,%s,%s)
+        (id,username,username_key,first_name,last_name,password_hash,role,created_at,stock_owner_id,permissions_json,position_id)
+        VALUES (%s,%s,%s,%s,%s,%s,'user',%s,%s,%s,%s)
         ON CONFLICT (username_key) DO NOTHING""",
-        (user_id, username, username.casefold(), first, last, password_hash(password), time.time(), owner_id, json.dumps({})))
+        (user_id, username, username.casefold(), first, last, password_hash(password), time.time(), owner_id, json.dumps(permissions),position['id']))
     if inserted.rowcount != 1:
         raise ApiError('Toto uživatelské jméno je již obsazené.', 409)
     execute(connection, 'INSERT INTO work_access (user_id,owner_id,pin_hash,stores_json) VALUES (%s,%s,%s,%s)',
             (user_id, owner_id, password_hash(pin), 'null'))
     audit(connection, actor_id, 'employee_created', 'Vytvoření zaměstnaneckého profilu: ' + username)
-    return public_user(one(connection, 'SELECT * FROM users WHERE id=%s', (user_id,)))
+    user=one(connection, 'SELECT * FROM users WHERE id=%s', (user_id,))
+    set_access(connection,user,permissions,position['id'])
+    index_employee(connection,user)
+    return public_user({**user,'position_name':position['name']})
