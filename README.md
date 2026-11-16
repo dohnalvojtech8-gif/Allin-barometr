@@ -83,3 +83,21 @@ Server uchovává VAPID klíče v soukromé databázi, do prohlížeče vrací j
 Ověření push logiky: `python -m pytest -q tests/test_notifications.py`. Doručení v testech je simulované; příjem na skutečném telefonu ověřuje uživatel tlačítkem Zkušební oznámení po udělení oprávnění.
 
 Ověření mobilního kontrastu: `python tests/noira-login-contrast.py` proti lokálnímu serveru.
+
+## Jazyky rozhraní
+
+Přihlášení, centrální panel, pracovní prostor i terminál obsahují přepínač češtiny, angličtiny a němčiny. Volba se uchovává v prohlížeči pod `noira.language` a platí i po opětovném otevření. Změna nepřepisuje rozpracované formuláře, skutečné hodnoty `<option>`, názvy provozů a produktů ani měny uložených výsledků. Texty zadané uživatelem a katalogové podklady zůstávají v původním znění. Slovník ovládání a překladová vrstva jsou v `server/web/i18n.js`.
+
+## Denní uzávěrky — pouze majitel
+
+V existujícím Nastavení majitele je konfigurace původu uzávěrek a import CSV podle vzoru NOIRA. Porovnání provozů obsahuje denní historii, datumové a provozní filtry, samostatné měny, chybějící náklady, graf a export vybraného období. Karta provozu ukazuje poslední importovaný den. Hlavní nabídka a její pořadí zůstávají zachovány. Provozní ani zaměstnanecké rozhraní finanční reporty nenačítá; server odmítá všechny finanční endpointy uvnitř provozu i běžnému účtu s oprávněním správy uživatelů. Každý dotaz také ověřuje vlastníka provozovny.
+
+Aktivní je **ruční CSV import**, nikoli automatická synchronizace s dodavateli. Nabídka Dotykačka / Storyous / Septim pouze označuje zdroj dat. Nezobrazuje falešné připojení a neukládá dodavatelské klíče. Pro skutečný konektor potřebuje NOIRA registraci aplikace, přístupy dodavatele a schválení majitele dat; implementace a integrační ověření následují až s těmito přístupy. Viz oficiální dokumentace [Dotykačky](https://docs.api.dotypos.com/getting-started/), [Storyous](https://docs.api.storyous.com/) a [služby Septim](https://www.septim.cz/sluzby-servis/vyvoj-na-miru).
+
+CSV používá UTF-8, středník, čárku nebo tabulátor. Požadované sloupce: `datum`, `trzby_bez_dph`; volitelné: `kasa`, `mena`, `naklady_zbozi`, `provozni_naklady`, `uzaverka_id`. Jeden řádek musí být souhrn jedné pokladny za jeden provozní den, nikoli jednotlivá účtenka nebo směna. Datum je ISO nebo `DD.MM.RRRR`, nejvýše dnešní provozní datum v Europe/Prague. Částky mají nejvýše dvě desetinná místa; prázdné náklady znamenají neznámé hodnoty. Nula je skutečně nulový náklad. Vzor lze stáhnout přímo v nastavení.
+
+Částky se ukládají jako celé setiny měny. Odhad zisku se počítá pouze při známých nákladech zboží i provozu: tržby bez DPH minus obě nákladové položky. Nejde automaticky o účetní čistý zisk. Různé měny se nesčítají a dny bez záznamu neznamenají nulové tržby. Stejný den a identifikátor pokladny aktualizují existující záznam; opakování stejného souboru nepřidá duplicitní výsledky. Každá oprava má zachovaný předchozí snímek, původ a čas. Celý import probíhá v jedné transakci s omezením na 5 000 souhrnů / 2 MB. Denní finanční historie a revize se neořezávají úklidem běžné 90denní aktivity.
+
+Tabulky `pos_connections`, `pos_days`, `pos_revisions`, `pos_imports` jsou v soukromém centrálním schématu; vznikají idempotentně při spuštění stejně jako zbytek tohoto projektu. RLS je zapnuté, přímá oprávnění `PUBLIC`, `anon`, `authenticated` odebraná. Do Supabase Data API se finanční tabulky nezpřístupňují; přístup vede výhradně přes autorizovaný backend.
+
+Ověření: `python -m pytest -q tests/test_pos.py` a `python tests/noira-languages-pos.py` (druhý pouze lokálně, se stejným účtem a serverem jako ostatní browser testy).

@@ -647,7 +647,7 @@ def stock_script():return send_from_directory(WEB,'stock.js')
 def health():
     with db() as c:execute(c,'SELECT 1')
     from server.vision import configuration
-    return jsonify(status='ok',version='1.0.0',application='NOIRA',database='supabase' if SUPABASE_DATABASE_URL else 'postgres',freeUnlocks=FREE_UNLOCKS,automaticLevelEnabled=configuration()['enabled'],shopBundleTemplates=len(SHOP_TEMPLATES))
+    return jsonify(status='ok',version='1.1.0',application='NOIRA',database='supabase' if SUPABASE_DATABASE_URL else 'postgres',freeUnlocks=FREE_UNLOCKS,automaticLevelEnabled=configuration()['enabled'],shopBundleTemplates=len(SHOP_TEMPLATES))
 @app.get('/')
 def index():return send_from_directory(WEB,'index.html' if getattr(g,'venue',None) else 'owner.html')
 @app.get('/designs.js')
@@ -715,8 +715,14 @@ from server.allin import register as register_allin
 register_allin(app)
 from server.notifications import register as register_notifications
 register_notifications(app)
+from server.pos import register as register_pos
+register_pos(app)
 
 @app.get('/noira.css')
 def noira_theme():return send_from_directory(WEB,'noira.css')
+
+
+@app.get('/i18n.js')
+def i18n_script():return send_from_directory(WEB,'i18n.js')
 
 if __name__=='__main__':app.run(host='0.0.0.0',port=int(os.environ.get('PORT','10000')))

@@ -13,7 +13,7 @@
   try{
    const response=await fetch('/api/venue');if(!response.ok)return;
    const {venue}=await response.json();
-   document.querySelectorAll('.workspace>div,.header-identity>span:last-child').forEach(el=>{el.replaceChildren(document.createTextNode(venue.name));const sub=document.createElement('small');sub.textContent=venue.address||'Samostatný provoz';el.append(sub)});
+   document.querySelectorAll('.workspace>div,.header-identity>span:last-child').forEach(el=>{el.replaceChildren();const name=document.createElement('span');name.translate=false;name.textContent=venue.name;el.append(name);const sub=document.createElement('small');sub.textContent=venue.address||'Samostatný provoz';el.append(sub)});
    const bottom=document.querySelector('.aside-bottom');if(bottom){const link=document.createElement('a');link.href='/';link.textContent='← Centrální panel majitele';bottom.prepend(link)}
    document.title=venue.name+' · NOIRA';
   }catch{}
