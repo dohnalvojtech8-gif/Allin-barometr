@@ -15,7 +15,7 @@
    const {venue}=await response.json();
    document.querySelectorAll('.workspace>div,.header-identity>span:last-child').forEach(el=>{el.replaceChildren(document.createTextNode(venue.name));const sub=document.createElement('small');sub.textContent=venue.address||'Samostatný provoz';el.append(sub)});
    const bottom=document.querySelector('.aside-bottom');if(bottom){const link=document.createElement('a');link.href='/';link.textContent='← Centrální panel majitele';bottom.prepend(link)}
-   document.title=venue.name+' · Barometr';
+   document.title=venue.name+' · NOIRA';
   }catch{}
  });
 })();

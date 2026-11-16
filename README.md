@@ -1,4 +1,4 @@
-# Allin Barometr
+# NOIRA · Midnight Club
 
 Centrální aplikace majitele s libovolným počtem samostatných provozů. Vychází z [Barometru](https://github.com/dohnalvojtech8-gif/Barometr); zachovává jeho účtovou aplikaci, obchod s lahvemi a balíčky, sklady, inventury, kalibrace, skenování i pracovní terminál s PINem.
 
@@ -38,6 +38,8 @@ Health check: `/healthz`
 
 Tabulky a soukromá schémata se vytvářejí automaticky. Připojená databázová role potřebuje oprávnění vytvářet schémata a tabulky (standardní PostgreSQL připojení projektu). Schémata `allin_barometr` a `venue_*` nepřidávejte mezi Exposed schemas v Supabase. Aplikace používá vlastní serverové účty, nikoli Supabase Auth. Není potřeba publishable ani service role API klíč.
 
+V centrálním panelu i v profilu každého provozu je tlačítko Změnit heslo. U majitele mění společné přihlašovací heslo; zaměstnanec mění pouze heslo svého účtu v konkrétním provozu. Zaměstnanecká hesla mají nejméně 8 znaků, majitel může použít vlastní heslo od 4 znaků.
+
 Heslo z prostředí vytvoří účet při prvním startu; pozdější změny hesla se provádějí v aplikaci. Změna původního env hesla nepřepisuje existující účet.
 
 ## Oddělení provozů
@@ -51,7 +53,7 @@ Heslo z prostředí vytvoří účet při prvním startu; pozdější změny hes
 - Tabulky mají RLS a odebraná veřejná oprávnění. Data se čtou přes Flask backend a jeho ověřené relace; frontend nemá databázové přihlašovací údaje.
 - Kopíruje se kód a katalog. Existující produkční účty a provozní data původního Barometru se neimportují automaticky.
 
-Porovnání vychází ze skladových dat a nákupních cen v Kč. Nezměřené položky nejsou zahrnuty do hodnoty zásob. Manko se uvádí pro poslední inventuru provozu; bez výchozího srovnání se nezobrazuje nula jako známý výsledek. Neoceněné manko je označené.
+Přehled i porovnání ukazují skladové množství po jednotlivých jednotkách (ks, l, kg, balení). Jednotky se nesčítají dohromady. Nezměřené položky nejsou považovány za nulový stav. Manko se uvádí v jednotkách poslední inventury, bez cen a finančních ukazatelů. Historická nákladová pole zůstávají v uložených dokumentech kvůli kompatibilitě, rozhraní je nevyužívá.
 
 ## Lokální ověření
 

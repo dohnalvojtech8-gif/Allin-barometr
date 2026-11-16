@@ -506,11 +506,17 @@ def user_delete(id):
 @authenticated()
 def change_password():
     data=body();old=data.get('oldPassword','');new=data.get('newPassword','')
-    if not isinstance(old,str) or not isinstance(new,str) or not 8<=len(new)<=128:raise ApiError('Nové heslo musí mít 8–128 znaků.')
+    minimum=4 if g.user['role']=='admin' else 8
+    if not isinstance(old,str) or not isinstance(new,str) or not minimum<=len(new)<=128:raise ApiError(f'Nové heslo musí mít {minimum}–128 znaků.')
     rate_limit(['password:'+g.user['id']],5)
-    if not password_ok(old,g.user['password_hash']):raise ApiError('Současné heslo není správné.',403)
-    with db() as c:
-        execute(c,'UPDATE users SET password_hash=%s WHERE id=%s',(password_hash(new),g.user['id']));execute(c,'DELETE FROM sessions WHERE user_id=%s AND token_hash<>%s',(g.user['id'],g.user['token_hash']));audit(c,g.user['id'],'password_changed','Změna hesla')
+    central_owner=bool(getattr(g,'venue',None) and g.user['role']=='admin')
+    with db(central=central_owner) as c:
+        account=one(c,'SELECT * FROM users WHERE id=%s',(g.user['id'],))
+        if not account or not password_ok(old,account['password_hash']):raise ApiError('Současné heslo není správné.',403)
+        execute(c,'UPDATE users SET password_hash=%s WHERE id=%s',(password_hash(new),account['id']))
+        token=digest(request.cookies.get(COOKIE,'')) if central_owner else g.user['token_hash']
+        execute(c,'DELETE FROM sessions WHERE user_id=%s AND token_hash<>%s',(account['id'],token))
+        audit(c,account['id'],'password_changed','Změna hesla')
     return jsonify(ok=True)
 def write_stock_changes(c,owner,before,after,revision):
     from server.stock import change_rows
@@ -637,7 +643,7 @@ def stock_script():return send_from_directory(WEB,'stock.js')
 def health():
     with db() as c:execute(c,'SELECT 1')
     from server.vision import configuration
-    return jsonify(status='ok',version='0.14.0',database='supabase' if SUPABASE_DATABASE_URL else 'postgres',freeUnlocks=FREE_UNLOCKS,automaticLevelEnabled=configuration()['enabled'],shopBundleTemplates=len(SHOP_TEMPLATES))
+    return jsonify(status='ok',version='1.0.0',application='NOIRA',database='supabase' if SUPABASE_DATABASE_URL else 'postgres',freeUnlocks=FREE_UNLOCKS,automaticLevelEnabled=configuration()['enabled'],shopBundleTemplates=len(SHOP_TEMPLATES))
 @app.get('/')
 def index():return send_from_directory(WEB,'index.html' if getattr(g,'venue',None) else 'owner.html')
 @app.get('/designs.js')
@@ -666,8 +672,8 @@ def pwa_manifest():
     venue=getattr(g,'venue',None)
     if venue:
         prefix='/v/'+venue['id']+'/'
-        manifest.update(id=prefix,name=venue['name']+' · Barometr',short_name=venue['name'][:24],start_url=prefix,scope=prefix)
-    else:manifest.update(name='Allin Barometr',short_name='Allin',description='Centrální panel majitele provozů')
+        manifest.update(id=prefix,name=venue['name']+' · NOIRA',short_name=venue['name'][:24],start_url=prefix,scope=prefix)
+    else:manifest.update(name='NOIRA',short_name='NOIRA',description='Centrální panel majitele provozů')
     response=jsonify(manifest);response.mimetype='application/manifest+json'
     return response
 @app.get('/sw.js')
@@ -703,5 +709,8 @@ def premium_theme():
 
 from server.allin import register as register_allin
 register_allin(app)
+
+@app.get('/noira.css')
+def noira_theme():return send_from_directory(WEB,'noira.css')
 
 if __name__=='__main__':app.run(host='0.0.0.0',port=int(os.environ.get('PORT','10000')))

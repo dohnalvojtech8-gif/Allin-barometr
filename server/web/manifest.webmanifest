@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "BAROMETR",
-  "short_name": "BAROMETR",
+  "name": "NOIRA",
+  "short_name": "NOIRA",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

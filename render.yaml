@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: allin-barometr
+    name: noira
     runtime: python
     region: frankfurt
     plan: free

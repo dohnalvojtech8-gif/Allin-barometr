@@ -121,10 +121,22 @@ def test_summary_uses_real_stock_and_latest_shortage(hub):
  'moves':[],'draft':None,'barInventories':[]}
  assert client.put(pa+'/api/stock',json={'revision':0,'data':data},headers=ha).status_code==200
  first=next(v for v in client.get('/api/owner/venues').json['venues'] if v['id']==a)
- assert first['stockValue']==200 and first['unmeasuredPositions']==1
+ assert first['quantities']=={'ks':10} and first['unmeasuredPositions']==1
  assert first['latestShortage'] is None
  data['counts'].append({'id':'c2','inventoryId':'second','product':'p','store':'main','qty':8,'at':'2025-01-02T10:00:00+00:00'})
  assert client.put(pa+'/api/stock',json={'revision':1,'data':data},headers=ha).status_code==200
  second=next(v for v in client.get('/api/owner/venues').json['venues'] if v['id']==a)
- assert second['stockValue']==160 and second['latestShortage']==40
+ assert second['quantities']=={'ks':8} and second['latestShortage']=={'ks':2}
  assert second['inventories']==2 and second['belowMinimum']==1
+
+
+def test_owner_password_can_change_from_each_venue(hub):
+ client,h,owner=hub;a=create(hub,'Heslo A');b=create(hub,'Heslo B');pa,ha=enter(hub,a);pb,hb=enter(hub,b)
+ assert client.post(pa+'/api/password',json={'oldPassword':'wrong','newPassword':'new-owner-password'},headers=ha).status_code==403
+ assert client.post(pa+'/api/password',json={'oldPassword':'test-owner-password','newPassword':'owner-next-password'},headers=ha).status_code==200
+ other=app.test_client()
+ assert other.post('/api/login',json={'username':owner,'password':'test-owner-password'}).status_code==401
+ assert other.post('/api/login',json={'username':owner,'password':'owner-next-password'}).status_code==200
+ assert client.post(pb+'/api/password',json={'oldPassword':'owner-next-password','newPassword':'owner-last-password'},headers=hb).status_code==200
+ assert other.get('/api/me').status_code==401
+ assert client.get('/api/me').status_code==200

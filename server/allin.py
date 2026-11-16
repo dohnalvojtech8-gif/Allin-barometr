@@ -77,13 +77,13 @@ def register(app):
             row=one(c,'SELECT data_json FROM stock_documents WHERE user_id=%s',(venue['owner_id'],))
             data=json.loads(row['data_json']) if row else {'stores':[],'products':[],'counts':[],'moves':[],'barInventories':[]}
             stores=[s for s in data['stores'] if not s.get('archivedAt')]
-            value=0;low=0;known=0;unmeasured=0
+            quantities={};low=0;known=0;unmeasured=0
             for store in stores:
                 from server.work import local_products
                 for product in local_products(data,store['id']):
                     qty=current_quantity(data,product['id'],store['id'])
                     if qty is None:unmeasured+=1;continue
-                    known+=1;value+=qty*product.get('cost',0)
+                    known+=1;unit=product['unit'];quantities[unit]=quantities.get(unit,0)+qty
                     if qty<product.get('min',0):low+=1
             inventory_ids={r.get('inventoryId') or r['store']+'|'+r['at'] for r in data['counts']}
             inventory_ids.update(r['id'] for r in data.get('barInventories',[]))
@@ -94,18 +94,20 @@ def register(app):
                 run=runs.setdefault(key,{'at':count['at'],'items':[]})
                 run['items'].append(count)
             latest=max(runs.values(),key=lambda r:r['at'],default=None)
-            shortage=None;unpriced=False
+            shortage=None
             if latest:
                 comparable=[i for i in latest['items'] if i.get('expected') is not None]
                 if comparable:
                     short=[i for i in comparable if i['qty']<i['expected']]
-                    shortage=round(sum((i['expected']-i['qty'])*i.get('cost',0) for i in short),2)
-                    unpriced=any(i.get('cost',0)<=0 for i in short)
+                    shortage={}
+                    for item in short:
+                        unit=item['unit'];shortage[unit]=shortage.get(unit,0)+item['expected']-item['qty']
+                    shortage={unit:round(qty,3) for unit,qty in shortage.items()}
             last=one(c,'SELECT created_at FROM events ORDER BY created_at DESC LIMIT 1')
             team=one(c,"SELECT COUNT(*) AS n FROM users WHERE role='user'")['n']
-            return {**venue,'stockValue':round(value,2),'warehouses':len(stores),'products':len(data['products']),
+            return {**venue,'quantities':{unit:round(qty,3) for unit,qty in quantities.items()},'warehouses':len(stores),'products':len(data['products']),
                 'inventories':len(inventory_ids),'belowMinimum':low,'measuredPositions':known,'unmeasuredPositions':unmeasured,
-                'latestShortage':shortage,'unpricedShortage':unpriced,'latestInventoryAt':latest['at'] if latest else None,'employees':team,'lastActivity':last['created_at'] if last else None}
+                'latestShortage':shortage,'latestInventoryAt':latest['at'] if latest else None,'employees':team,'lastActivity':last['created_at'] if last else None}
 
     @app.get('/api/owner/venues')
     @authenticated(admin=True)
