@@ -35,7 +35,7 @@ for(let i=menuGroups.length-1;i>=0;i--)if(!menuGroups[i].items.length)menuGroups
 let drawerOpen=false;
 function setDrawer(open){const sidebar=$('#sidebar'),mobile=matchMedia('(max-width:760px)').matches;drawerOpen=open&&mobile;document.body.classList.toggle('drawer-open',drawerOpen);$('#menu-toggle').setAttribute('aria-expanded',String(drawerOpen));$('#sidebar-backdrop').hidden=!drawerOpen;sidebar.inert=mobile&&!drawerOpen;sidebar.setAttribute('aria-hidden',String(mobile&&!drawerOpen));$('.shell').inert=drawerOpen;if(drawerOpen){requestAnimationFrame(()=>$('#sidebar-close').focus())}else if(mobile)$('#menu-toggle').focus({preventScroll:true});}
 $('#menu-toggle').onclick=()=>setDrawer(!drawerOpen);$('#sidebar-close').onclick=()=>setDrawer(false);$('#sidebar-backdrop').onclick=()=>setDrawer(false);$('#sidebar').addEventListener('click',e=>{if(e.target.closest('a'))setDrawer(false)});window.addEventListener('resize',()=>setDrawer(drawerOpen));setDrawer(false);
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&drawerOpen)setDrawer(false);if(e.key==='Tab'&&drawerOpen){const els=[...$('#sidebar').querySelectorAll('button,a,summary')].filter(x=>x.getClientRects().length),first=els[0],last=els.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&drawerOpen)setDrawer(false);if(e.key==='Tab'&&drawerOpen){const els=[...$('#sidebar').querySelectorAll('button,a,summary,select,input,[tabindex="0"]')].filter(x=>x.getClientRects().length),first=els[0],last=els.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}}});
 window.addEventListener('barometr-start-bottles',()=>inventory.quickStart());
 function renderNavigation(page){
  const section=['detail'].includes(page)?'library':['inventory','period','measure','result','barreview'].includes(page)?'barnew':page==='warehouse'||page==='product'?'warehouses':page==='countreview'?'stockcount':page==='audit'?'audits':page;
@@ -113,3 +113,4 @@ if(location.hash.startsWith('#owner='))history.replaceState(null,'',location.pat
 render();
 setInterval(()=>{if(document.visibilityState==='visible')auth.send('/api/activity',{action:'heartbeat'}).catch(()=>{});},60000);
 })().catch(e=>{const node=document.querySelector('#app');if(node)node.innerHTML='<div class="notice">Aplikaci se nepodařilo načíst. Obnovte stránku.</div>';});
+

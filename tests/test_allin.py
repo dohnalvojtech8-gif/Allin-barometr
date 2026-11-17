@@ -155,3 +155,33 @@ def test_summary_keeps_units_separate_and_omits_financial_fields(hub):
  summary=client.get('/api/owner/venues').json['venues'][0]
  assert summary['quantities']=={'ks':12,'kg':2.5}
  assert 'stockValue' not in summary and 'unpricedShortage' not in summary
+
+
+
+def test_optional_venue_manager_and_owner_only_updates(hub):
+ client,h,_=hub
+ response=client.post('/api/owner/venues',json={'name':'S manažerem','managerFirstName':' Jana ','managerLastName':' Nováková '},headers=h)
+ assert response.status_code==201,response.json
+ venue=response.json['venue'];url='/api/owner/venues/'+venue['id']+'/manager'
+ assert venue['manager_first_name']=='Jana' and venue['manager_last_name']=='Nováková'
+ assert client.put(url,json={'managerFirstName':'Petr','managerLastName':'Dvořák'},headers=h).status_code==200
+ row=next(v for v in client.get('/api/owner/venues').json['venues'] if v['id']==venue['id'])
+ assert row['manager_first_name']=='Petr' and row['manager_last_name']=='Dvořák'
+ for values in [{'managerFirstName':'Jana'},{'managerLastName':'Nováková'},{'managerFirstName':None},{'managerFirstName':'x'*65,'managerLastName':'Y'}]:
+  assert client.put(url,json=values,headers=h).status_code==400
+  assert client.post('/api/owner/venues',json={'name':'Neplatný',**values},headers=h).status_code==400
+ assert client.put(url,json={},headers=h).status_code==200
+ row=next(v for v in client.get('/api/owner/venues').json['venues'] if v['id']==venue['id'])
+ assert row['manager_first_name']==row['manager_last_name']==''
+ assert client.put(url,json={}).status_code==403
+ assert app.test_client().put(url,json={}).status_code==401
+ # An authenticated second owner cannot update a foreign venue.
+ token=secrets.token_urlsafe(32);csrf=secrets.token_urlsafe(24);other=str(uuid.uuid4())
+ with db(central=True) as c:
+  execute(c,"INSERT INTO users (id,username,username_key,first_name,last_name,password_hash,role,created_at) VALUES (%s,%s,%s,'Other','Owner',%s,'admin',%s)",(other,other,other,password_hash('other-owner-password'),time.time()))
+  execute(c,'INSERT INTO sessions (token_hash,user_id,csrf,created_at,expires_at) VALUES (%s,%s,%s,%s,%s)',(digest(token),other,csrf,time.time(),time.time()+86400))
+ stranger=app.test_client();stranger.set_cookie('barometr_session',token)
+ assert stranger.put(url,json={'managerFirstName':'Foreign','managerLastName':'Owner'},headers={'X-CSRF-Token':csrf}).status_code==404
+ plain=create(hub,'Bez manažera')
+ row=next(v for v in client.get('/api/owner/venues').json['venues'] if v['id']==plain)
+ assert row['manager_first_name']==row['manager_last_name']==''

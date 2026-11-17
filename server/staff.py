@@ -118,6 +118,8 @@ def register(app):
             columns={r['name'] for r in allrows(c,'PRAGMA table_info(users)')} if TEST_DB else {r['column_name'] for r in allrows(c,"SELECT column_name FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='users'")}
             if 'position_id' not in columns:execute(c,'ALTER TABLE users ADD COLUMN position_id TEXT')
             if 'permission_overrides_json' not in columns:execute(c,"ALTER TABLE users ADD COLUMN permission_overrides_json TEXT NOT NULL DEFAULT '{}'")
+            from server.app import upgrade_contact_columns
+            upgrade_contact_columns(c)
             seed_positions(c)
             if not TEST_DB:
                 execute(c,'ALTER TABLE staff_positions ENABLE ROW LEVEL SECURITY');execute(c,'REVOKE ALL ON staff_positions FROM PUBLIC')
@@ -148,3 +150,4 @@ def register(app):
     for route in ['/api/admin/positions','/api/owner/venues/<venue_id>/positions']:
         app.add_url_rule(route,endpoint='positions_'+str(len(app.view_functions)),view_func=authenticated(admin=True)(positions),methods=['GET','POST'])
         app.add_url_rule(route+'/<position_id>',endpoint='position_'+str(len(app.view_functions)),view_func=authenticated(admin=True)(positions),methods=['PUT'])
+
