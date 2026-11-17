@@ -156,6 +156,7 @@ def register(app):
     @authenticated(admin=True)
     def sales_import(venue_id):
         values=body();first,last=period(values);register=values.get('register','hlavni')
+        if last>datetime.now(PRAGUE).date().isoformat():raise ApiError('Položkové prodeje nelze potvrdit pro budoucí období.')
         if not isinstance(register,str) or not register.strip() or len(register)>100 or any(ord(c)<32 for c in register):raise ApiError('Neplatné označení pokladny.')
         register=register.strip()
         if values.get('complete') is not True:raise ApiError('Potvrďte úplný export pro vybranou pokladnu a období.')
@@ -191,6 +192,7 @@ def register(app):
         products={p['id']:p for p in catalog['products']};stores={s['id'] for s in catalog['stores']};seen=set();clean=[]
         for row in ingredients:
             if not isinstance(row,dict):raise ApiError('Neplatná surovina.')
+            if not isinstance(row.get('productId'),str) or not isinstance(row.get('storeId'),str):raise ApiError('Vyberte produkt a sklad suroviny.')
             p=products.get(row.get('productId'));sid=row.get('storeId');qty=row.get('quantity');unit=row.get('unit')
             if not p or sid not in stores or (p.get('store') and p['store']!=sid) or (sid,p['id']) in seen or type(qty) not in (int,float) or not math.isfinite(qty) or not 0<qty<=1e9:raise ApiError('Surovina musí patřit do vybraného skladu a mít kladné množství.')
             if not isinstance(unit,str):raise ApiError('Vyberte jednotku suroviny.')

@@ -18,3 +18,37 @@ jobs:
       - run: python -m pytest -q
       - run: python -m compileall -q server
       - run: for file in server/web/*.js; do node --check "$file"; done
+
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt playwright==1.56.0
+      - run: python -m playwright install --with-deps chromium
+      - name: Start isolated test server
+        env:
+          BAROMETR_TEST_DB: /tmp/noira-ci.sqlite3
+          BAROMETR_TEST_HTTP: '1'
+          ADMIN1_USERNAME: owner
+          ADMIN1_PASSWORD: ci-owner-test-password
+        run: |
+          nohup python -m gunicorn --bind 127.0.0.1:10000 --workers 1 --threads 4 server.app:app > /tmp/noira-ci-server.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:10000/healthz; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/noira-ci-server.log
+          exit 1
+      - run: python tests/noira-intelligence-browser.py
+      - name: Server log on failure
+        if: failure()
+        run: cat /tmp/noira-ci-server.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: noira-intelligence-browser
+          path: /tmp/noira-ci-artifacts

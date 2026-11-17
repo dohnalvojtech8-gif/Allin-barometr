@@ -54,6 +54,9 @@ def stage(c,before,after,owner):
         # Unassigned bottle measurements require access to the complete venue.
         if any(not i.get('store') for b in content['bars'] for i in b.get('items',[])):
             stores.update(s['id'] for s in after['stores'])
+        from server.work import store_scope
+        scope=store_scope(c,g.user)
+        if scope is not None and not stores.issubset(scope):raise ApiError('Přiřaďte každé položce inventury dostupný sklad.',403)
         now=time.time();row={'id':key,'stores_json':json.dumps(sorted(stores))}
         kind='bar' if content['bars'] or any(r.get('kind')=='bar' for r in content['counts']) else 'warehouse'
         execute(c,'INSERT INTO inventory_submissions (id,owner_id,kind,stores_json,content_json,status,revision,submitted_by,submitted_name,submitted_at,updated_at) VALUES (%s,%s,%s,%s,%s,%s,1,%s,%s,%s,%s)',
@@ -119,6 +122,10 @@ def register(app):
     def detail(id):
         with db() as c:
             row=one(c,'SELECT * FROM inventory_submissions WHERE id=%s',(id,));allowed(c,row)
+            if row['status']=='approved':
+                saved=one(c,'SELECT data_json FROM stock_documents WHERE user_id=%s',(owner_id(),))
+                current=json.loads(saved['data_json']) if saved else {}
+                row['content_json']=json.dumps({'counts':[r for r in current.get('counts',[]) if r.get('reviewId')==id],'bars':[r for r in current.get('barInventories',[]) if r.get('reviewId')==id]})
             events=allrows(c,'SELECT id,action,actor_id,actor_name,reason,snapshot_json,created_at FROM inventory_review_events WHERE submission_id=%s ORDER BY created_at,id',(id,))
         return jsonify(submission=public(row),events=[{**{k:v for k,v in e.items() if k!='snapshot_json'},'snapshot':json.loads(e['snapshot_json'])} for e in events])
 
