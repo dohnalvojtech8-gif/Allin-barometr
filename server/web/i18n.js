@@ -5,7 +5,8 @@ window.NoiraI18n=(()=>{
  let language='cs';try{const saved=localStorage.getItem(key);if(supported.includes(saved))language=saved}catch{}
  const dictionary=new Map(),lowercase=new Map(),textSources=new WeakMap(),attributeSources=new WeakMap();
  function add(source,en,de){dictionary.set(source,[source,en,de]);lowercase.set(source.toLocaleLowerCase('cs'),[source,en,de])}
- const copy=`Inteligentní provozní analytika|Operational intelligence|Intelligente Betriebsanalyse
+ const copy=`
+Inteligentní provozní analytika|Operational intelligence|Intelligente Betriebsanalyse
 Chytřejší vyhodnocení inventur|Smarter inventory analysis|Intelligente Inventurauswertung
 Kontrola inventur a schvalování|Inventory review and approval|Inventurprüfung und Freigabe
 Kontrola inventur|Inventory review|Inventurprüfung
@@ -89,7 +90,6 @@ Tento provoz|This venue|Dieser Betrieb
 Spotřeba = počáteční fyzický stav + příjmy a převody − konečný stav − evidované odpisy. S prodeji ji srovnáváme podle receptur platných v okamžiku prodeje. Upozornění používá toleranci 5 %.|Consumption = opening physical stock + receipts and transfers − closing stock − recorded waste. Sales are compared using recipes effective at the time of sale. Alerts use a 5% tolerance.|Verbrauch = körperlicher Anfangsbestand + Zugänge und Umlagerungen − Endbestand − erfasster Schwund. Der Verkaufsabgleich nutzt zum Verkaufszeitpunkt gültige Rezepturen. Hinweise verwenden eine Toleranz von 5 %.
 Pouze pro majitele. Částky pocházejí z importovaných uzávěrek; různé měny se nesčítají. Marže vyžaduje náklady zboží, odhad zisku také provozní náklady.|Owner only. Amounts come from imported closing summaries; different currencies are not added together. Margin requires cost of goods; estimated profit also requires operating costs.|Nur für Inhaber. Beträge stammen aus importierten Tagesabschlüssen; verschiedene Währungen werden nicht addiert. Die Marge erfordert Wareneinsatz, der geschätzte Gewinn zusätzlich Betriebskosten.
 Ve vybraných datech nebyla nalezena odchylka splňující pravidla. Pro statistické vyhodnocení je potřeba alespoň pět předchozích srovnatelných inventur.|No discrepancy meeting the rules was found. Statistical analysis requires at least five previous comparable inventories.|Es wurde keine Abweichung gefunden, die den Regeln entspricht. Für die statistische Auswertung sind mindestens fünf vorherige vergleichbare Inventuren erforderlich.
-
 Pozice|Position|Position
 Oprávnění zaměstnance|Employee permissions|Mitarbeiterberechtigungen
 Pozice a přednastavená oprávnění|Positions and permission presets|Positionen und Berechtigungsvorlagen
