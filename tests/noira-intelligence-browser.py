@@ -46,11 +46,23 @@ with sync_playwright() as p:
  owner.locator('#owner-intelligence details').evaluate('(el)=>el.open=true');imports=owner.locator('[data-item-import]');imports.locator('[name=venue]').select_option(venue);imports.locator('[name=from]').fill('2026-01-01');imports.locator('[name=to]').fill('2026-01-01')
  imports.locator('[name=file]').set_input_files({'name':'sales.csv','mimeType':'text/csv','buffer':b'prodej_id;datum_cas;produkt_pokladny;pocet\n1;2026-01-01T20:00:00+01:00;DISH;2\n'});imports.locator('[name=complete]').check();imports.locator('button').click()
  owner.locator('#owner-intelligence summary').wait_for()
- owner.wait_for_function('!document.querySelector("[data-item-import] [name=file]").files.length')
+ owner.wait_for_function('()=>!document.querySelector("[data-item-import] [name=file]").files.length')
  assert owner.evaluate('document.documentElement.scrollWidth<=innerWidth')
  Path('/tmp/noira-ci-artifacts').mkdir(exist_ok=True)
  owner.screenshot(path='/tmp/noira-ci-artifacts/owner-analytics-mobile.png',full_page=True)
  worker.screenshot(path='/tmp/noira-ci-artifacts/employee-review-mobile.png',full_page=True)
  assert not errors,errors
+ # Public read-only probe; rerun this job after release to verify the deployed build.
+ live=browser.new_page(ignore_https_errors=True,service_workers='block')
+ health=live.request.get('https://noira-u804.onrender.com/healthz',timeout=120000)
+ assert health.status==200,health.text()
+ release=health.json()['version']
+ if release=='1.4.0':
+  live.goto('https://noira-u804.onrender.com',timeout=120000);live.locator('#auth-form [name=username]').wait_for()
+  assert live.evaluate('typeof window.NoiraIntelligence')=='object'
+  assert live.request.get('https://noira-u804.onrender.com/api/owner/analytics').status==401
+  assert live.request.get('https://noira-u804.onrender.com/intelligence.js?v=1.4.0').status==200
+  print('PASS: production NOIRA 1.4.0 health, login, intelligence asset and owner authentication boundary')
+ else:print('Production probe deferred until release; current version:',release)
  print('PASS: employee UI submits without PIN, manager return and approval, employee correction, approved balance, owner-only finance, recipe and POS item import, mobile layout')
  browser.close()
