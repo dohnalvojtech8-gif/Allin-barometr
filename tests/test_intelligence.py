@@ -132,3 +132,17 @@ def test_owner_recipe_and_sales_import_are_versioned_and_idempotent(hub):
  assert report.status_code==200,report.json
  assert report.json['venues'][0]['recipes'][0]['salesCode']=='DISH'
  assert client.get('/api/owner/analytics?from=bad').status_code==400
+
+def test_approval_order_prevents_double_counted_shortage(hub):
+ client,venue,prefix,vh=setup(hub);employee,eh,_=staff(hub,venue)
+ first=submit(employee,eh,prefix);second=submit(employee,eh,prefix)
+ url=prefix+'/api/inventory/submissions/'
+ assert client.post(url+second+'/decision',json={'action':'approve','revision':1},headers=vh).status_code==409
+ direct=client.get(prefix+'/api/stock').json
+ direct['data']['counts'].append({'id':'owner-later','store':'main','product':'flour','qty':80,'at':datetime.now(timezone.utc).isoformat()})
+ assert client.put(prefix+'/api/stock',json={'revision':direct['revision'],'data':direct['data']},headers=vh).status_code==409
+ assert client.post(url+first+'/decision',json={'action':'approve','revision':1},headers=vh).status_code==200
+ assert client.get(url+second).json['submission']['content']['counts'][0]['expected']==90
+ assert client.post(url+second+'/decision',json={'action':'approve','revision':1},headers=vh).status_code==200
+ approved=client.get(prefix+'/api/stock').json['data']['counts']
+ assert next(r for r in approved if r.get('reviewId')==second)['expected']==90

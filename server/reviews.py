@@ -28,10 +28,46 @@ def notify(c,row):
     execute(c,'INSERT INTO notification_outbox (id,kind,payload_json,created_at) VALUES (%s,%s,%s,%s)',(uid(),'inventory_review',json.dumps(payload,ensure_ascii=False),time.time()))
     g.notification_changes=True
 
+def check_order(c,counts,ignore=None):
+    from server.app import allrows,ApiError
+    from server.analytics import timestamp
+    if not counts:return
+    times={(r['store'],r['product']):timestamp(r['at']) for r in counts}
+    for pending in allrows(c,"SELECT id,content_json FROM inventory_submissions WHERE status IN ('pending','returned')"):
+        if pending['id']==ignore:continue
+        for older in json.loads(pending['content_json'])['counts']:
+            key=(older['store'],older['product'])
+            if key in times and timestamp(older['at'])<times[key]:
+                raise ApiError('Nejdříve vyřešte starší čekající inventuru stejných položek.',409)
+
+def refresh_expectations(c,owner,content):
+    from server.app import one
+    from server.stock import current_quantity
+    saved=one(c,'SELECT data_json FROM stock_documents WHERE user_id=%s',(owner,))
+    data=json.loads(saved['data_json']) if saved else {}
+    for row in content['counts']:row['expected']=current_quantity(data,row['product'],row['store'],row['at'])
+    normalize_bars(content)
+    return content
+
+def normalize_bars(content):
+    from server.app import ApiError
+    for bar in content['bars']:
+        for item in bar.get('items',[]):
+            matches=[r for r in content['counts'] if r.get('inventoryId')==bar['id'] and r['product']==item.get('product') and r['store']==item.get('store')]
+            if matches:
+                if abs(sum(r['qty'] for r in matches)-item['qty'])>1e-8:raise ApiError('Množství ve skladu a souhrnu baru se musí shodovat.')
+                item['expected']=sum(r['expected'] for r in matches) if all(r.get('expected') is not None for r in matches) else None
+                item['unit']=matches[0]['unit'];item['name']=matches[0]['productName']
+            else:item['expected']=None
+
 def stage(c,before,after,owner):
     """Employee measurement is durable but does not change approved stock balances."""
     from server.app import execute,one,ApiError,uid
-    if not getattr(g,'venue',None) or g.user['role']=='admin':return after
+    if not getattr(g,'venue',None):return after
+    if g.user['role']=='admin':
+        previous={r['id'] for r in before.get('counts',[])}
+        check_order(c,[r for r in after['counts'] if r['id'] not in previous])
+        return after
     old_counts={r['id'] for r in before.get('counts',[])}
     old_bars={r['id'] for r in before.get('barInventories',[])}
     new_counts=[r for r in after['counts'] if r['id'] not in old_counts]
@@ -43,6 +79,7 @@ def stage(c,before,after,owner):
         key=count.get('inventoryId') or count['id']
         groups.setdefault(key,{'counts':[],'bars':[]})['counts'].append(count)
     for key,content in groups.items():
+        normalize_bars(content)
         if one(c,'SELECT id FROM inventory_submissions WHERE id=%s',(key,)):
             raise ApiError('Tato inventura již byla odeslána ke kontrole.',409)
         for collection in content.values():
@@ -126,6 +163,7 @@ def register(app):
                 saved=one(c,'SELECT data_json FROM stock_documents WHERE user_id=%s',(owner_id(),))
                 current=json.loads(saved['data_json']) if saved else {}
                 row['content_json']=json.dumps({'counts':[r for r in current.get('counts',[]) if r.get('reviewId')==id],'bars':[r for r in current.get('barInventories',[]) if r.get('reviewId')==id]})
+            else:row['content_json']=json.dumps(refresh_expectations(c,owner_id(),json.loads(row['content_json'])))
             events=allrows(c,'SELECT id,action,actor_id,actor_name,reason,snapshot_json,created_at FROM inventory_review_events WHERE submission_id=%s ORDER BY created_at,id',(id,))
         return jsonify(submission=public(row),events=[{**{k:v for k,v in e.items() if k!='snapshot_json'},'snapshot':json.loads(e['snapshot_json'])} for e in events])
 
@@ -142,6 +180,8 @@ def register(app):
             if row['status']!='pending' or row['revision']!=values['revision']:raise ApiError('Inventura se mezitím změnila. Obnovte seznam.',409)
             content=json.loads(row['content_json'])
             if action=='approve':
+                check_order(c,content['counts'],id)
+                content=refresh_expectations(c,owner_id(),content)
                 saved=one(c,'SELECT * FROM stock_documents WHERE user_id=%s',(owner_id(),))
                 old=json.loads(saved['data_json']) if saved else {'stores':[],'products':[],'counts':[],'moves':[],'draft':None,'barInventories':[]}
                 new=copy.deepcopy(old)

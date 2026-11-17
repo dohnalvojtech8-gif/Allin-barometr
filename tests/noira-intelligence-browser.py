@@ -41,9 +41,9 @@ with sync_playwright() as p:
  assert manager.request.get(BASE+'/api/owner/analytics').status==401
  owner.goto(BASE+'/#comparison');owner.locator('#owner-intelligence h3').filter(has_text='1. Vývoj manka').wait_for();owner.locator('#owner-intelligence h3').filter(has_text='4. Tržby a marže').wait_for()
  assert owner.locator('#owner-nav a').count()==7
- owner.locator('#owner-intelligence summary').click();recipe=owner.locator('[data-recipe-form]');recipe.locator('[name=venue]').select_option(venue);recipe.locator('[name=salesCode]').fill('DISH');recipe.locator('[name=from]').fill('2026-01-01');recipe.locator('[data-quantity]').fill('0.25');recipe.locator('[name=reason]').fill('Výchozí ověřená receptura');recipe.locator('button.primary').click()
+ owner.locator('#owner-intelligence details').evaluate('(el)=>el.open=true');recipe=owner.locator('[data-recipe-form]');recipe.locator('[name=venue]').select_option(venue);recipe.locator('[name=salesCode]').fill('DISH');recipe.locator('[name=from]').fill('2026-01-01');recipe.locator('[data-quantity]').fill('0.25');recipe.locator('[name=reason]').fill('Výchozí ověřená receptura');recipe.locator('button.primary').click()
  owner.locator('#owner-intelligence td').filter(has_text='DISH').first.wait_for()
- owner.locator('#owner-intelligence summary').click();imports=owner.locator('[data-item-import]');imports.locator('[name=venue]').select_option(venue);imports.locator('[name=from]').fill('2026-01-01');imports.locator('[name=to]').fill('2026-01-01')
+ owner.locator('#owner-intelligence details').evaluate('(el)=>el.open=true');imports=owner.locator('[data-item-import]');imports.locator('[name=venue]').select_option(venue);imports.locator('[name=from]').fill('2026-01-01');imports.locator('[name=to]').fill('2026-01-01')
  imports.locator('[name=file]').set_input_files({'name':'sales.csv','mimeType':'text/csv','buffer':b'prodej_id;datum_cas;produkt_pokladny;pocet\n1;2026-01-01T20:00:00+01:00;DISH;2\n'});imports.locator('[name=complete]').check();imports.locator('button').click()
  owner.locator('#owner-intelligence summary').wait_for()
  owner.wait_for_function('!document.querySelector("[data-item-import] [name=file]").files.length')
