@@ -5,7 +5,91 @@ window.NoiraI18n=(()=>{
  let language='cs';try{const saved=localStorage.getItem(key);if(supported.includes(saved))language=saved}catch{}
  const dictionary=new Map(),lowercase=new Map(),textSources=new WeakMap(),attributeSources=new WeakMap();
  function add(source,en,de){dictionary.set(source,[source,en,de]);lowercase.set(source.toLocaleLowerCase('cs'),[source,en,de])}
- const copy=`
+ const copy=`Inteligentní provozní analytika|Operational intelligence|Intelligente Betriebsanalyse
+Chytřejší vyhodnocení inventur|Smarter inventory analysis|Intelligente Inventurauswertung
+Kontrola inventur a schvalování|Inventory review and approval|Inventurprüfung und Freigabe
+Kontrola inventur|Inventory review|Inventurprüfung
+Čekající inventury, schvalování a opravy s důvodem.|Pending inventories, approval and corrections with reasons.|Ausstehende Inventuren, Freigaben und begründete Korrekturen.
+1. Vývoj manka|1. Shortage trends|1. Fehlbestandsentwicklung
+2. Neobvyklé a opakované odchylky|2. Unusual and recurring discrepancies|2. Ungewöhnliche und wiederkehrende Abweichungen
+3. Spotřeba proti prodejům|3. Consumption versus sales|3. Verbrauch und Verkäufe
+4. Tržby a marže provozů|4. Venue revenue and margins|4. Umsätze und Margen der Betriebe
+5. Inventury ke kontrole|5. Inventories awaiting review|5. Inventuren zur Prüfung
+6. Kontrola a rozhodnutí|6. Review and decision|6. Prüfung und Entscheidung
+Čeká na schválení|Awaiting approval|Wartet auf Freigabe
+Vrácená k opravě|Returned for correction|Zur Korrektur zurückgegeben
+Vrácené k opravě|Returned for correction|Zur Korrektur zurückgegeben
+Schválená|Approved|Freigegeben
+Schválené|Approved|Freigegeben
+Zkontrolovat inventuru|Review inventory|Inventur prüfen
+Schválit uzavření|Approve closure|Abschluss freigeben
+Vrátit k opravě|Return for correction|Zur Korrektur zurückgeben
+Poznámka / důvod vrácení|Note / reason for return|Hinweis / Rückgabegrund
+Oprava vrácené inventury|Correct returned inventory|Zurückgegebene Inventur korrigieren
+Oprava schválené inventury majitelem|Owner correction of approved inventory|Korrektur einer freigegebenen Inventur durch den Inhaber
+Odeslat znovu ke schválení|Resubmit for approval|Erneut zur Freigabe einreichen
+Uložit opravu s auditní stopou|Save correction with audit trail|Korrektur mit Prüfprotokoll speichern
+Důvod opravy|Reason for correction|Korrekturgrund
+Historie rozhodnutí a oprav|Decision and correction history|Entscheidungs- und Korrekturverlauf
+Odesláno|Submitted|Eingereicht
+Opraveno a znovu odesláno|Corrected and resubmitted|Korrigiert und erneut eingereicht
+Schváleno|Approved|Freigegeben
+Vráceno|Returned|Zurückgegeben
+Oprava schválené inventury|Correction of approved inventory|Korrektur einer freigegebenen Inventur
+Odeslat inventuru ke schválení|Submit inventory for approval|Inventur zur Freigabe einreichen
+Odeslat ke schválení|Submit for approval|Zur Freigabe einreichen
+Inventura byla odeslána ke schválení.|Inventory submitted for approval.|Inventur zur Freigabe eingereicht.
+Inventura čeká na schválení manažerem.|Inventory awaits manager approval.|Inventur wartet auf Freigabe durch den Manager.
+Kontrolovat a schvalovat inventury ostatních|Review and approve others' inventories|Inventuren anderer prüfen und freigeben
+Zobrazit analýzu|Show analysis|Analyse anzeigen
+Všechny produkty|All products|Alle Produkte
+Období|Period|Zeitraum
+Manko|Shortage|Fehlbestand
+Přebytek|Surplus|Mehrbestand
+Bez výchozího stavu|No baseline|Kein Ausgangsbestand
+Provoz / produkt|Venue / product|Betrieb / Produkt
+Období měření|Measurement period|Messzeitraum
+Skutečná spotřeba|Actual consumption|Tatsächlicher Verbrauch
+Podle prodejů|Based on sales|Laut Verkäufen
+Úplnost dat|Data coverage|Datenvollständigkeit
+Chybí předchozí fyzická inventura|Previous physical inventory missing|Vorherige körperliche Inventur fehlt
+Chybí úplné prodeje nebo uzávěrky|Complete sales or closing summaries missing|Vollständige Verkäufe oder Tagesabschlüsse fehlen
+Chybí receptura|Recipe missing|Rezeptur fehlt
+Změnila se surovina nebo jednotka|Ingredient or unit changed|Zutat oder Einheit wurde geändert
+Úplná data|Complete data|Vollständige Daten
+Tržby bez DPH|Revenue excluding VAT|Umsatz ohne Mehrwertsteuer
+Hrubá marže|Gross margin|Bruttomarge
+Změna proti předchozímu období|Change from previous period|Änderung gegenüber dem Vorzeitraum
+Odhad zisku|Estimated profit|Geschätzter Gewinn
+Dny bez uzávěrky|Days without closing summary|Tage ohne Tagesabschluss
+Chybí náklady|Costs missing|Kosten fehlen
+Položkové prodeje a receptury|Item sales and recipes|Artikelverkäufe und Rezepturen
+Stáhnout vzor CSV|Download CSV template|CSV-Vorlage herunterladen
+Připravte úplný export jedné pokladny za vybrané dny. Import nahradí položkové prodeje této pokladny v zadaném období a zachová revizi předchozích dat.|Prepare a complete export for one register and the selected days. Import replaces that register's item sales in the period and preserves a revision of previous data.|Erstellen Sie einen vollständigen Export einer Kasse für die gewählten Tage. Der Import ersetzt die Artikelverkäufe dieser Kasse im Zeitraum und bewahrt eine Version der bisherigen Daten.
+Export obsahuje všechny položkové prodeje včetně storen za celou vybranou pokladnu a období.|The export includes all item sales and voids for the entire selected register and period.|Der Export enthält sämtliche Artikelverkäufe und Stornierungen der ausgewählten Kasse im gesamten Zeitraum.
+Importovat položkové prodeje|Import item sales|Artikelverkäufe importieren
+Import je uložený.|Import saved.|Import gespeichert.
+Receptury|Recipes|Rezepturen
+Jeden kód produktu pokladny může spotřebovat více skladových surovin. Nová verze má datum platnosti a důvod.|One POS product code can consume several stock ingredients. Each new version has an effective date and reason.|Ein Kassenproduktcode kann mehrere Lagerzutaten verbrauchen. Jede neue Version hat ein Gültigkeitsdatum und eine Begründung.
+Kód produktu pokladny|POS product code|Kassenproduktcode
+Kód pokladny|POS code|Kassencode
+Platí od|Effective from|Gültig ab
+Suroviny|Ingredients|Zutaten
+Surovina|Ingredient|Zutat
+Množství na jeden prodej|Quantity per sale|Menge pro Verkauf
+Přidat surovinu|Add ingredient|Zutat hinzufügen
+＋ Přidat surovinu|＋ Add ingredient|＋ Zutat hinzufügen
+Odebrat surovinu|Remove ingredient|Zutat entfernen
+Důvod|Reason|Begründung
+Uložit verzi receptury|Save recipe version|Rezepturversion speichern
+Receptura je uložená.|Recipe saved.|Rezeptur gespeichert.
+Žádné inventury v tomto stavu.|No inventories with this status.|Keine Inventuren mit diesem Status.
+Pro vybrané období nejsou data.|No data for the selected period.|Keine Daten für den gewählten Zeitraum.
+Tento provoz|This venue|Dieser Betrieb
+Spotřeba = počáteční fyzický stav + příjmy a převody − konečný stav − evidované odpisy. S prodeji ji srovnáváme podle receptur platných v okamžiku prodeje. Upozornění používá toleranci 5 %.|Consumption = opening physical stock + receipts and transfers − closing stock − recorded waste. Sales are compared using recipes effective at the time of sale. Alerts use a 5% tolerance.|Verbrauch = körperlicher Anfangsbestand + Zugänge und Umlagerungen − Endbestand − erfasster Schwund. Der Verkaufsabgleich nutzt zum Verkaufszeitpunkt gültige Rezepturen. Hinweise verwenden eine Toleranz von 5 %.
+Pouze pro majitele. Částky pocházejí z importovaných uzávěrek; různé měny se nesčítají. Marže vyžaduje náklady zboží, odhad zisku také provozní náklady.|Owner only. Amounts come from imported closing summaries; different currencies are not added together. Margin requires cost of goods; estimated profit also requires operating costs.|Nur für Inhaber. Beträge stammen aus importierten Tagesabschlüssen; verschiedene Währungen werden nicht addiert. Die Marge erfordert Wareneinsatz, der geschätzte Gewinn zusätzlich Betriebskosten.
+Ve vybraných datech nebyla nalezena odchylka splňující pravidla. Pro statistické vyhodnocení je potřeba alespoň pět předchozích srovnatelných inventur.|No discrepancy meeting the rules was found. Statistical analysis requires at least five previous comparable inventories.|Es wurde keine Abweichung gefunden, die den Regeln entspricht. Für die statistische Auswertung sind mindestens fünf vorherige vergleichbare Inventuren erforderlich.
+
 Pozice|Position|Position
 Oprávnění zaměstnance|Employee permissions|Mitarbeiterberechtigungen
 Pozice a přednastavená oprávnění|Positions and permission presets|Positionen und Berechtigungsvorlagen

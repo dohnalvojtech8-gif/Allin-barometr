@@ -7,7 +7,7 @@ permissions:
   contents: read
 jobs:
   tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
@@ -20,7 +20,7 @@ jobs:
       - run: for file in server/web/*.js; do node --check "$file"; done
 
   browser:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -46,7 +46,7 @@ jobs:
       - run: python tests/noira-intelligence-browser.py
       - name: Server log on failure
         if: failure()
-        run: cat /tmp/noira-ci-server.log
+        run: test ! -f /tmp/noira-ci-server.log || cat /tmp/noira-ci-server.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
