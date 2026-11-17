@@ -1,0 +1,20 @@
+name: NOIRA checks
+on:
+  pull_request:
+  push:
+    branches: [inventory-intelligence]
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt pytest==8.3.5
+      - run: python -m pytest -q
+      - run: python -m compileall -q server
+      - run: for file in server/web/*.js; do node --check "$file"; done
