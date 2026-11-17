@@ -80,7 +80,7 @@ def validate_stock(data):
 def current_quantity(data,pid,sid,at=None):
     end=datetime.fromisoformat(at.replace('Z','+00:00')).timestamp() if at else float('inf')
     eligible=[r for r in data.get('counts',[]) if r['product']==pid and r['store']==sid and datetime.fromisoformat(r['at'].replace('Z','+00:00')).timestamp()<=end]
-    last=max(eligible,key=lambda r:r['at'],default=None)
+    last=max(eligible,key=lambda r:datetime.fromisoformat(r['at'].replace('Z','+00:00')).timestamp(),default=None)
     start=datetime.fromisoformat(last['at'].replace('Z','+00:00')).timestamp() if last else -float('inf')
     moves=[r for r in data.get('moves',[]) if r['product']==pid and r['store']==sid and start<datetime.fromisoformat(r['at'].replace('Z','+00:00')).timestamp()<=end]
     if last is None and not moves:return None

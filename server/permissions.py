@@ -12,6 +12,7 @@ PERMISSIONS={
  'catalog.view':('Prohlížet katalog a knihovnu lahví',True),
  'reference.view':('Prohlížet ověřenou databázi produktů',True),
  'reports.view':('Prohlížet porovnání a přehledy',True),
+ 'inventory.review':('Kontrolovat a schvalovat inventury ostatních',False),
  'inventory.adjust':('Opravovat uzavřené inventury',False),
  'catalog.unlock':('Odemykat alkoholické nápoje',True),
  'users.manage':('Spravovat běžné zaměstnanecké účty',False),

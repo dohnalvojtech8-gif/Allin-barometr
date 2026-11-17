@@ -1,7 +1,7 @@
 'use strict';
 window.NoiraNotifications=(()=>{
  const auth=window.BarometrAuth;
- const labels={inventory:'Uložené inventury a měření',low_stock:'Zásoby pod nastaveným minimem',stock_movements:'Příjmy, výdeje a přesuny'};
+ const labels={inventory_review:'Inventury čekající na schválení',inventory:'Uložené inventury a měření',low_stock:'Zásoby pod nastaveným minimem',stock_movements:'Příjmy, výdeje a přesuny'};
  let settings=null,subscription=null,generation=0;
  const supports=()=>window.isSecureContext&&'serviceWorker'in navigator&&'PushManager'in window&&'Notification'in window;
  const standalone=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;

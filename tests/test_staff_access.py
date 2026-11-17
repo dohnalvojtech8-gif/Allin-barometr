@@ -93,6 +93,10 @@ def test_stock_inventory_needs_no_pin_and_history_cannot_be_rewritten(hub):
  document['counts'].append({'id':'count','inventoryId':'inv','product':'p','store':'main','qty':10,'at':'2026-01-01T10:00:00+00:00','actorId':owner,'actorName':'fake'})
  result=staff.put(prefix+'/api/stock',json={'revision':current['revision'],'data':document},headers=sh)
  assert result.status_code==200,result.json
+ assert result.json['pendingInventoryIds'] and not result.json['data']['counts']
+ for pending in result.json['pendingInventoryIds']:
+  assert client.post(prefix+'/api/inventory/submissions/'+pending+'/decision',json={'action':'approve','revision':1},headers=vh).status_code==200
+ result=staff.get(prefix+'/api/stock')
  row=result.json['data']['counts'][0]
  assert row['actorId']==user['id'] and row['actorName']=='Tereza Nováková'
  assert row['at']!='2026-01-01T10:00:00+00:00'
@@ -101,19 +105,22 @@ def test_stock_inventory_needs_no_pin_and_history_cannot_be_rewritten(hub):
   altered=copy.deepcopy(document);mutate(altered)
   assert staff.put(prefix+'/api/stock',json={'revision':revision,'data':altered},headers=sh).status_code==403
  altered=copy.deepcopy(document);altered['counts'][0]['qty']=9
- assert client.put(prefix+'/api/stock',json={'revision':revision,'data':altered},headers=vh).status_code==200
+ assert client.put(prefix+'/api/stock',json={'revision':revision,'data':altered,'correctionReason':'Oprava po ověření měření'},headers=vh).status_code==200
  current=staff.get(prefix+'/api/stock').json
  current['data']['moves'].append({'id':'delivery','store':'main','product':'p','qty':2,'reason':'Příjem','at':'2026-01-01T10:00:00+00:00'})
  current['data']['barInventories'].append({'id':'bar','at':'2026-01-01T10:00:00+00:00','items':[{'name':'Lahev','qty':1,'unit':'l'}]})
  saved=staff.put(prefix+'/api/stock',json={'revision':current['revision'],'data':current['data']},headers=sh)
  assert saved.status_code==200,saved.json
+ for pending in saved.json['pendingInventoryIds']:
+  assert client.post(prefix+'/api/inventory/submissions/'+pending+'/decision',json={'action':'approve','revision':1},headers=vh).status_code==200
+ saved=staff.get(prefix+'/api/stock')
  for key in ('moves','barInventories'):
   assert saved.json['data'][key][0]['actorId']==user['id']
   changed=copy.deepcopy(saved.json['data']);changed[key].clear()
   assert staff.put(prefix+'/api/stock',json={'revision':saved.json['revision'],'data':changed},headers=sh).status_code==403
  with db(central=True) as c:record=one(c,'SELECT * FROM allin_venues WHERE id=%s',(venue,))
  with app.test_request_context(),venue_context(record),db() as c:
-  assert one(c,'SELECT actor_id FROM stock_change_log WHERE entity_id=%s AND revision=%s',('count',revision))['actor_id']==user['id']
+  assert one(c,'SELECT actor_id FROM stock_change_log WHERE entity_id=%s AND revision=%s',('count',revision))['actor_id']==owner
  # Even a legacy stored history permission cannot grant an employee owner powers.
   execute(c,'UPDATE users SET permissions_json=%s WHERE id=%s',(json.dumps({'inventory.adjust':True}),user['id']))
   assert allrows(c,"SELECT * FROM events WHERE user_id=%s AND action='stock_saved'",(user['id'],))

@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse
 from flask import g,request,jsonify,send_from_directory
 
-DEFAULTS={'inventory':True,'low_stock':True,'stock_movements':False}
+DEFAULTS={'inventory':True,'low_stock':True,'stock_movements':False,'inventory_review':True}
 OUTBOX_SQL="""CREATE TABLE IF NOT EXISTS notification_outbox (id TEXT PRIMARY KEY,kind TEXT NOT NULL,payload_json TEXT NOT NULL,created_at DOUBLE PRECISION NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,sent_at DOUBLE PRECISION)"""
 TABLES=[
 "CREATE TABLE IF NOT EXISTS notification_keys (id TEXT PRIMARY KEY,private_key TEXT NOT NULL,public_key TEXT NOT NULL)",
@@ -95,16 +95,17 @@ def dispatch(app,venue):
                 subscriptions=allrows(c,'SELECT s.*,p.preferences_json FROM notification_subscriptions s JOIN notification_profiles p ON p.user_id=s.user_id AND p.scope=s.scope WHERE s.scope=%s OR (s.scope=%s AND s.user_id=%s)',(venue['id'],'owner',venue['owner_id']))
             if not keys:return
             for event in pending:
-                payload=json.loads(event['payload_json']);stores=set(payload.pop('stores',[]));payload['tag']='noira-'+event['id']
+                payload=json.loads(event['payload_json']);required=payload.pop('requiredPermission',None);stores=set(payload.pop('stores',[]));payload['tag']='noira-'+event['id']
                 sent=set();failed=False
                 for row in subscriptions:
                     if row['scope']=='owner':
                         if not owner:continue
                     else:
                         if row['user_id'] not in access:continue
+                        if required and not any(u['id']==row['user_id'] and has_permission(u,required) for u in users):continue
                         scope=access[row['user_id']]
                         if scope is not None and not stores.issubset(scope):continue
-                    if not json.loads(row['preferences_json']).get(event['kind'],False) or row['endpoint'] in sent:continue
+                    if not json.loads(row['preferences_json']).get(event['kind'],DEFAULTS.get(event['kind'],False)) or row['endpoint'] in sent:continue
                     try:deliver(json.loads(row['subscription_json']),payload,keys['private_key']);sent.add(row['endpoint'])
                     except Exception as error:
                         status=getattr(getattr(error,'response',None),'status_code',None)
@@ -143,7 +144,7 @@ def register(app):
     def scope():return g.venue['id'] if getattr(g,'venue',None) else 'owner'
     def profile(c):
         row=one(c,'SELECT preferences_json FROM notification_profiles WHERE user_id=%s AND scope=%s',(g.user['id'],scope()))
-        return json.loads(row['preferences_json']) if row else dict(DEFAULTS)
+        return {**DEFAULTS,**json.loads(row['preferences_json'])} if row else dict(DEFAULTS)
     def save_profile(c,preferences):
         execute(c,'INSERT INTO notification_profiles (user_id,scope,preferences_json) VALUES (%s,%s,%s) ON CONFLICT(user_id,scope) DO UPDATE SET preferences_json=excluded.preferences_json',(g.user['id'],scope(),json.dumps(preferences)))
     def keypair(c):
@@ -164,8 +165,8 @@ def register(app):
         with db(central=True) as c:
             if request.method=='PUT':
                 prefs=body().get('preferences')
-                if not isinstance(prefs,dict) or set(prefs)!=set(DEFAULTS) or any(type(v) is not bool for v in prefs.values()):raise ApiError('Neplatné nastavení oznámení.')
-                save_profile(c,prefs)
+                if not isinstance(prefs,dict) or set(prefs)-set(DEFAULTS) or any(type(v) is not bool for v in prefs.values()):raise ApiError('Neplatné nastavení oznámení.')
+                save_profile(c,{**profile(c),**prefs})
             key=keypair(c)
             count=one(c,'SELECT COUNT(*) AS n FROM notification_subscriptions WHERE user_id=%s AND scope=%s',(g.user['id'],scope()))['n']
             return jsonify(preferences=profile(c),publicKey=key['public_key'],devices=count,scope=scope())

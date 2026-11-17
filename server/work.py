@@ -118,6 +118,8 @@ def register(app):
             new=prepare_counts(old,attribute_records(old,validate_stock(new),g.user))
         except StockValidationError as e:raise ApiError(str(e))
         owner=g.work_device['owner_id']
+        from server.reviews import stage
+        new=stage(c,old,new,owner)
         execute(c,'INSERT INTO stock_documents (user_id,revision,data_json,updated_at) VALUES (%s,0,%s,%s) ON CONFLICT (user_id) DO NOTHING',(owner,json.dumps(old),time.time()))
         n=execute(c,'UPDATE stock_documents SET data_json=%s,revision=revision+1,updated_at=%s WHERE user_id=%s AND revision=%s',(json.dumps(new,ensure_ascii=False),time.time(),owner,revision)).rowcount
         if n!=1:raise ApiError('Stav skladu se změnil. Načtěte jej a zápis zopakujte.',409)
@@ -266,6 +268,11 @@ def register(app):
         with db() as c:
             data,revision=document(c,g.work_device['owner_id']);check_store(c,data,v.get('store'));ps=local_products(data,v['store'])
             if set(values)!={p['id'] for p in ps}:raise ApiError('Seznam položek se změnil. Načtěte inventuru znovu.',409)
+            submission=one(c,'SELECT * FROM inventory_submissions WHERE id=%s AND owner_id=%s',(operation,g.work_device['owner_id']))
+            if submission:
+                content=json.loads(submission['content_json'])
+                if submission['submitted_by']!=g.user['id'] or {r['product']:r['qty'] for r in content['counts']}!=values or any(r['store']!=v['store'] for r in content['counts']):raise ApiError('ID inventury již bylo použito.',409)
+                return jsonify(ok=True,duplicate=True,pendingInventoryIds=[operation])
             previous=[r for r in data['counts'] if r.get('inventoryId')==operation]
             if previous:
                 if {r['product']:r['qty'] for r in previous}!=values or any(r['store']!=v['store'] for r in previous):raise ApiError('ID inventury již bylo použito.',409)
@@ -277,7 +284,7 @@ def register(app):
             try:save(c,data,new,revision)
             except StockValidationError as e:raise ApiError(str(e))
             audit(c,g.user['id'],'work_inventory','Uložení inventury skladu '+v['store'])
-        return jsonify(ok=True)
+        return jsonify(ok=True,pendingInventoryIds=getattr(g,'pending_inventory_ids',[]))
 
     @app.get('/api/work/changes')
     @worker('stock.audit')

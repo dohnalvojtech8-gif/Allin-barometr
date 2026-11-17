@@ -78,6 +78,8 @@ from server.work import TABLES as WORK_TABLES,store_scope,scoped_stock,merge_sco
 SCHEMA.extend(WORK_TABLES)
 from server.staff import POSITION_SQL
 SCHEMA.append(POSITION_SQL)
+from server.reviews import TABLES as REVIEW_TABLES
+SCHEMA.extend(REVIEW_TABLES)
 from server.notifications import OUTBOX_SQL
 SCHEMA.append(OUTBOX_SQL)
 
@@ -617,13 +619,21 @@ def stock_document():
         try:validate_active_changes(old,clean)
         except StockValidationError as e:raise ApiError(str(e))
         clean=prepare_counts(old,attribute_records(old,clean,g.user))
+        from server.reviews import stage,protect_closed,event as review_event
+        corrected=protect_closed(old,clean,data.get('correctionReason'))
+        clean=stage(c,old,clean,owner_id)
         changed=execute(c,'UPDATE stock_documents SET data_json=%s,revision=revision+1,updated_at=%s WHERE user_id=%s AND revision=%s',(json.dumps(clean,ensure_ascii=False),time.time(),owner_id,revision)).rowcount
         if changed!=1:raise ApiError('Sklad byl změněn na jiném zařízení. Obnovte stránku.',409)
         write_stock_changes(c,owner_id,old,clean,revision+1)
+        if corrected:
+            for key in ('counts','barInventories'):
+                current={r['id']:r for r in clean.get(key,[])}
+                for row in old.get(key,[]):
+                    if row.get('reviewId') and current.get(row['id'])!=row:review_event(c,{'id':row['reviewId']},'corrected',data['correctionReason'].strip(),{'before':row,'after':current.get(row['id'])})
         audit(c,g.user['id'],'stock_saved','Uložení skladů a inventur')
         visible=scoped_stock(clean,store_scope(c,g.user))
         latest=stock_latest_changes(c,owner_id,visible)
-    return jsonify(ok=True,revision=revision+1,data=visible,latestChanges=latest)
+    return jsonify(ok=True,revision=revision+1,data=visible,latestChanges=latest,pendingInventoryIds=getattr(g,'pending_inventory_ids',[]))
 
 @app.get('/api/admin/stock-changes')
 @authenticated(permission='stock.audit')
@@ -694,7 +704,7 @@ def stock_script():return send_from_directory(WEB,'stock.js')
 def health():
     with db() as c:execute(c,'SELECT 1')
     from server.vision import configuration
-    return jsonify(status='ok',version='1.3.0',application='NOIRA',database='supabase' if SUPABASE_DATABASE_URL else 'postgres',freeUnlocks=FREE_UNLOCKS,automaticLevelEnabled=configuration()['enabled'],shopBundleTemplates=len(SHOP_TEMPLATES))
+    return jsonify(status='ok',version='1.4.0',application='NOIRA',database='supabase' if SUPABASE_DATABASE_URL else 'postgres',freeUnlocks=FREE_UNLOCKS,automaticLevelEnabled=configuration()['enabled'],shopBundleTemplates=len(SHOP_TEMPLATES))
 @app.get('/')
 def index():return send_from_directory(WEB,'index.html' if getattr(g,'venue',None) else 'owner.html')
 @app.get('/designs.js')
@@ -766,6 +776,10 @@ from server.pos import register as register_pos
 register_pos(app)
 from server.staff import register as register_staff
 register_staff(app)
+from server.reviews import register as register_reviews
+register_reviews(app)
+from server.operations import register as register_operations
+register_operations(app)
 
 @app.get('/noira.css')
 def noira_theme():return send_from_directory(WEB,'noira.css')
