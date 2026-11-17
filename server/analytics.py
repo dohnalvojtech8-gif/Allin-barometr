@@ -33,6 +33,7 @@ def observations(document):
             product=products.get(pid,{})
             unit=row.get('unit') or product.get('unit','ks')
             expected=row.get('expected')
+            if previous is not None and (previous.get('unit') or product.get('unit','ks'))!=unit:expected=None
             difference=row['qty']-expected if expected is not None else None
             inbound=sum(m['qty'] for m in changes if m['reason'] in ('Příjem','Vratka','Přesun'))
             waste=-sum(m['qty'] for m in changes if m['reason']=='Odpis')
