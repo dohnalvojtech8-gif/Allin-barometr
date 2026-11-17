@@ -51,8 +51,8 @@ with sync_playwright() as p:
  Path('/tmp/noira-ci-artifacts').mkdir(exist_ok=True)
  owner.screenshot(path='/tmp/noira-ci-artifacts/owner-analytics-mobile.png',full_page=True)
  worker.screenshot(path='/tmp/noira-ci-artifacts/employee-review-mobile.png',full_page=True)
- owner.locator('.noira-language select').select_option('en');owner.get_by_role('heading',name='Operational intelligence',exact=True).wait_for()
- owner.locator('.noira-language select').select_option('de');owner.get_by_role('heading',name='Intelligente Betriebsanalyse',exact=True).wait_for()
+ owner.locator('#owner-menu').click();owner.locator('.noira-language select').select_option('en');owner.locator('#owner-sidebar-close').click();owner.get_by_role('heading',name='Operational intelligence',exact=True).wait_for()
+ owner.locator('#owner-menu').click();owner.locator('.noira-language select').select_option('de');owner.locator('#owner-sidebar-close').click();owner.get_by_role('heading',name='Intelligente Betriebsanalyse',exact=True).wait_for()
  assert not errors,errors
  # Public read-only probe; rerun this job after release to verify the deployed build.
  live=browser.new_page(ignore_https_errors=True,service_workers='block')

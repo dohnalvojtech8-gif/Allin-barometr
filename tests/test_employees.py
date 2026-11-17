@@ -87,3 +87,40 @@ def test_other_owner_and_delegated_manager_cannot_create_profiles(hub):
  assert manager.get(prefix+'/api/admin/users').status_code==200
  assert manager.post(prefix+'/api/admin/users',json=profile(pin='4321'),headers={'X-CSRF-Token':csrf}).status_code==403
  assert client.post('/api/owner/venues/'+venue_id+'/members',json=profile(pin='4321'),headers={**h,'Origin':'https://evil.example'}).status_code==403
+
+
+
+def test_optional_contacts_and_profile_creation_date(hub):
+ client,h,_=hub;venue_id=create(hub,'Kontakty');prefix,vh=enter(hub,venue_id)
+ data={**profile(),'phone':' +420 777 123 456 ','email':' tereza@example.cz '}
+ started=time.time()
+ response=client.post('/api/owner/venues/'+venue_id+'/members',json=data,headers=h)
+ assert response.status_code==201,response.json
+ user=response.json['user'];assert user['phone']=='+420 777 123 456' and user['email']=='tereza@example.cz'
+ assert started<=user['created_at']<=time.time()
+ team=client.get('/api/owner/team').json['members'];member=next(m for m in team if m['id']==user['id'])
+ detail=client.get(prefix+'/api/admin/users/'+user['id']).json['user']
+ listed=next(u for u in client.get(prefix+'/api/admin/users').json['users'] if u['id']==user['id'])
+ for item in (member,detail,listed):
+  assert item['phone']==user['phone'] and item['email']==user['email'] and item['created_at']==user['created_at']
+ for index,contacts in enumerate(({}, {'phone':'+49 (30) 123-4567'}, {'email':'other@example.de'})):
+  response=client.post(prefix+'/api/admin/users',json={**profile(pin=str(4321+index)),**contacts},headers=vh)
+  assert response.status_code==201,response.json
+  assert response.json['user']['phone']==contacts.get('phone','')
+  assert response.json['user']['email']==contacts.get('email','')
+ for field,value in [('phone',123),('phone','hello'),('phone','123'),('phone','1'*41),('email','invalid'),('email','a@b'),('email','x\n@example.cz'),('email',None)]:
+  response=client.post(prefix+'/api/admin/users',json={**profile(pin='9999'),field:value},headers=vh)
+  assert response.status_code==400,(field,value,response.json)
+ assert len(client.get(prefix+'/api/admin/users').json['users'])==5
+
+
+def test_contact_columns_upgrade_preserves_existing_data():
+ import sqlite3
+ from server.app import upgrade_contact_columns
+ c=sqlite3.connect(':memory:');c.row_factory=sqlite3.Row
+ c.execute('CREATE TABLE users (id TEXT PRIMARY KEY,created_at DOUBLE PRECISION)')
+ c.execute("INSERT INTO users VALUES ('legacy',1234)")
+ upgrade_contact_columns(c);upgrade_contact_columns(c)
+ user=dict(c.execute('SELECT * FROM users').fetchone())
+ assert user=={'id':'legacy','created_at':1234,'phone':'','email':''}
+ c.close()

@@ -4,6 +4,18 @@ import re
 import time
 
 
+
+def contact_values(values):
+    from server.app import ApiError, textfield
+    phone = textfield({'phone': values.get('phone', '')}, 'phone', 0, 40)
+    email = textfield({'email': values.get('email', '')}, 'email', 0, 254)
+    if phone and (not re.fullmatch(r'\+?[0-9 ()/.-]+', phone) or not 5 <= len(re.sub(r'\D', '', phone)) <= 20):
+        raise ApiError('Zadejte platné telefonní číslo.')
+    if email and not re.fullmatch(r'[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+', email):
+        raise ApiError('Zadejte platný e-mail zaměstnance.')
+    return phone, email
+
+
 def create_employee(connection, values, owner_id, actor_id):
     from server.app import (ApiError, allrows, audit, execute, one, password_hash,
                             password_ok, public_user, textfield, uid)
@@ -13,6 +25,7 @@ def create_employee(connection, values, owner_id, actor_id):
     execute(connection,'UPDATE users SET last_seen=last_seen WHERE id=%s',(owner_id,))
     position=assigned_position(connection,values.get('positionId') or 'zamestnanec')
     permissions=validate_permissions(values.get('permissions',json.loads(position['permissions_json'])))
+    phone, email = contact_values(values)
     first = textfield(values, 'firstName', 1, 64)
     last = textfield(values, 'lastName', 1, 64)
     username = textfield(values, 'username', 3, 32)
@@ -39,10 +52,10 @@ def create_employee(connection, values, owner_id, actor_id):
 
     user_id = uid()
     inserted = execute(connection, """INSERT INTO users
-        (id,username,username_key,first_name,last_name,password_hash,role,created_at,stock_owner_id,permissions_json,position_id)
-        VALUES (%s,%s,%s,%s,%s,%s,'user',%s,%s,%s,%s)
+        (id,username,username_key,first_name,last_name,password_hash,role,created_at,stock_owner_id,permissions_json,position_id,phone,email)
+        VALUES (%s,%s,%s,%s,%s,%s,'user',%s,%s,%s,%s,%s,%s)
         ON CONFLICT (username_key) DO NOTHING""",
-        (user_id, username, username.casefold(), first, last, password_hash(password), time.time(), owner_id, json.dumps(permissions),position['id']))
+        (user_id, username, username.casefold(), first, last, password_hash(password), time.time(), owner_id, json.dumps(permissions),position['id'],phone,email))
     if inserted.rowcount != 1:
         raise ApiError('Toto uživatelské jméno je již obsazené.', 409)
     execute(connection, 'INSERT INTO work_access (user_id,owner_id,pin_hash,stores_json) VALUES (%s,%s,%s,%s)',
@@ -52,3 +65,4 @@ def create_employee(connection, values, owner_id, actor_id):
     set_access(connection,user,permissions,position['id'])
     index_employee(connection,user)
     return public_user({**user,'position_name':position['name']})
+

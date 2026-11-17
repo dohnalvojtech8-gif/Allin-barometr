@@ -83,10 +83,20 @@ SCHEMA.extend(REVIEW_TABLES)
 from server.notifications import OUTBOX_SQL
 SCHEMA.append(OUTBOX_SQL)
 
+def upgrade_contact_columns(connection):
+    """Add optional contact fields to central and existing venue databases."""
+    columns = ({r['name'] for r in allrows(connection, 'PRAGMA table_info(users)')} if TEST_DB else
+               {r['column_name'] for r in allrows(connection, "SELECT column_name FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='users'")})
+    for field in ('phone', 'email'):
+        if field not in columns:
+            execute(connection, "ALTER TABLE users ADD COLUMN " + field + " TEXT NOT NULL DEFAULT ''")
+
+
 def init_db(seed_admins=True):
     with db() as c:
         for sql in SCHEMA:execute(c,sql)
         columns={r['name'] for r in allrows(c,'PRAGMA table_info(users)')} if TEST_DB else {r['column_name'] for r in allrows(c,"SELECT column_name FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='users'")}
+        upgrade_contact_columns(c)
         if 'position_id' not in columns:execute(c,'ALTER TABLE users ADD COLUMN position_id TEXT')
         if 'permission_overrides_json' not in columns:execute(c,"ALTER TABLE users ADD COLUMN permission_overrides_json TEXT NOT NULL DEFAULT '{}'")
         if 'permissions_json' not in columns:execute(c,"ALTER TABLE users ADD COLUMN permissions_json TEXT NOT NULL DEFAULT '{}'")
@@ -208,7 +218,7 @@ def authenticated(admin=False,bottles=False,permission=None):
         return wrapped
     return decorator
 
-def public_user(u):return {**{k:u[k] for k in ('id','username','first_name','last_name','role','status','created_at','last_login','last_seen','login_count')},'permissions':effective_permissions(u),'stockOwnerId':u.get('stock_owner_id'),'positionId':u.get('position_id'),'positionName':u.get('position_name')}
+def public_user(u):return {**{k:u[k] for k in ('id','username','first_name','last_name','role','status','created_at','last_login','last_seen','login_count')},'permissions':effective_permissions(u),'stockOwnerId':u.get('stock_owner_id'),'positionId':u.get('position_id'),'positionName':u.get('position_name'),'phone':u.get('phone',''),'email':u.get('email','')}
 def rate_limit(keys,max_attempts=8,window=900):
     now=time.time()
     with db() as c:
@@ -492,7 +502,7 @@ def employee_create():
 @authenticated(permission='users.manage')
 def users_list():
     with db() as c:
-        users=allrows(c,'SELECT u.id,u.username,u.first_name,u.last_name,u.role,u.status,u.created_at,u.last_login,u.last_seen,u.login_count,u.permissions_json,u.stock_owner_id,u.position_id,p.name AS position_name FROM users u LEFT JOIN staff_positions p ON p.id=u.position_id ORDER BY u.created_at DESC')
+        users=allrows(c,'SELECT u.id,u.username,u.first_name,u.last_name,u.phone,u.email,u.role,u.status,u.created_at,u.last_login,u.last_seen,u.login_count,u.permissions_json,u.stock_owner_id,u.position_id,p.name AS position_name FROM users u LEFT JOIN staff_positions p ON p.id=u.position_id ORDER BY u.created_at DESC')
         counts={r['user_id']:r['n'] for r in allrows(c,'SELECT user_id,COUNT(*) AS n FROM events WHERE created_at>%s GROUP BY user_id',(time.time()-7*86400,))}
         for u in users:
             u['activity7d']=counts.get(u['id'],0);u['permissions']=effective_permissions(u);u['stockOwnerId']=u.pop('stock_owner_id',None);u.pop('permissions_json',None)
@@ -794,3 +804,4 @@ def i18n_script():return send_from_directory(WEB,'i18n.js')
 def team_script():return send_from_directory(WEB,'team.js')
 
 if __name__=='__main__':app.run(host='0.0.0.0',port=int(os.environ.get('PORT','10000')))
+

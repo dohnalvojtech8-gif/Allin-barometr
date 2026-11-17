@@ -10,7 +10,7 @@ from flask import g, request, jsonify, send_from_directory
 
 VENUES="""CREATE TABLE IF NOT EXISTS allin_venues (
  id TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
- name TEXT NOT NULL, address TEXT NOT NULL DEFAULT '', created_at DOUBLE PRECISION NOT NULL)"""
+ name TEXT NOT NULL, address TEXT NOT NULL DEFAULT '', manager_first_name TEXT NOT NULL DEFAULT '', manager_last_name TEXT NOT NULL DEFAULT '', created_at DOUBLE PRECISION NOT NULL)"""
 
 class VenueMount:
     def __init__(self, application):self.application=application
@@ -32,9 +32,12 @@ def venue_context(venue):
     finally:g.venue=previous
 
 def install_context(app):
-    from server.app import db,execute,one,ApiError,TEST_DB,SUPABASE_DATABASE_URL
+    from server.app import db,execute,one,allrows,ApiError,TEST_DB,SUPABASE_DATABASE_URL
     with db(central=True) as c:
         execute(c,VENUES)
+        columns={r['name'] for r in allrows(c,'PRAGMA table_info(allin_venues)')} if TEST_DB else {r['column_name'] for r in allrows(c,"SELECT column_name FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='allin_venues'")}
+        for field in ('manager_first_name','manager_last_name'):
+            if field not in columns:execute(c,"ALTER TABLE allin_venues ADD COLUMN "+field+" TEXT NOT NULL DEFAULT ''")
         execute(c,'CREATE INDEX IF NOT EXISTS allin_venues_owner ON allin_venues(owner_id,created_at)')
         if not TEST_DB:
             execute(c,'ALTER TABLE allin_venues ENABLE ROW LEVEL SECURITY')
@@ -71,6 +74,12 @@ def register(app):
         with db(central=True) as c:venue=one(c,'SELECT * FROM allin_venues WHERE id=%s AND owner_id=%s',(venue_id,g.user['id']))
         if not venue:raise ApiError('Provoz neexistuje nebo k němu nemáte přístup.',404)
         return venue
+
+    def manager_values(values):
+        first=textfield({'managerFirstName':values.get('managerFirstName','')},'managerFirstName',0,64)
+        last=textfield({'managerLastName':values.get('managerLastName','')},'managerLastName',0,64)
+        if bool(first)!=bool(last):raise ApiError('Vyplňte jméno i příjmení manažera, nebo ponechte obě pole prázdná.')
+        return first,last
 
     def summary(venue):
         with venue_context(venue),db() as c:
@@ -119,7 +128,8 @@ def register(app):
     @authenticated(admin=True)
     def create():
         values=body();name=textfield(values,'name',1,100);address=textfield({'address':values.get('address','')},'address',0,200)
-        venue={'id':uid(),'owner_id':g.user['id'],'name':name,'address':address,'created_at':time.time()}
+        first,last=manager_values(values)
+        venue={'manager_first_name':first,'manager_last_name':last,'id':uid(),'owner_id':g.user['id'],'name':name,'address':address,'created_at':time.time()}
         # Provision first; publish the venue only after the private database is ready.
         schema='venue_'+venue['id'].replace('-','')
         if not TEST_DB:
@@ -138,7 +148,7 @@ def register(app):
                     audit(c,actor['id'],'venue_created','Vytvoření provozu '+name)
                 seed_shop()
             with db(central=True) as c:
-                execute(c,'INSERT INTO allin_venues (id,owner_id,name,address,created_at) VALUES (%s,%s,%s,%s,%s)',tuple(venue[k] for k in ('id','owner_id','name','address','created_at')))
+                execute(c,'INSERT INTO allin_venues (id,owner_id,name,address,created_at,manager_first_name,manager_last_name) VALUES (%s,%s,%s,%s,%s,%s,%s)',tuple(venue[k] for k in ('id','owner_id','name','address','created_at','manager_first_name','manager_last_name')))
                 audit(c,g.user['id'],'venue_created','Vytvoření provozu '+name)
         except Exception:
             if TEST_DB:
@@ -147,6 +157,15 @@ def register(app):
                 with db(central=True) as c:execute(c,'DROP SCHEMA '+schema+' CASCADE')
             raise
         return jsonify(venue=summary(venue)),201
+
+    @app.put('/api/owner/venues/<venue_id>/manager')
+    @authenticated(admin=True)
+    def update_manager(venue_id):
+        venue=owned(venue_id);first,last=manager_values(body())
+        with db(central=True) as c:
+            execute(c,'UPDATE allin_venues SET manager_first_name=%s,manager_last_name=%s WHERE id=%s AND owner_id=%s',(first,last,venue_id,g.user['id']))
+            audit(c,g.user['id'],'venue_manager_changed','Změna odpovědného manažera provozu '+venue['name'])
+        return jsonify(ok=True)
 
     @app.post('/api/owner/venues/<venue_id>/enter')
     @authenticated(admin=True)
@@ -234,3 +253,4 @@ def register(app):
     def owner_css():return send_from_directory(WEB,'owner.css')
     @app.get('/venue-context.js')
     def venue_js():return send_from_directory(WEB,'venue-context.js')
+

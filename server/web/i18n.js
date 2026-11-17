@@ -90,6 +90,25 @@ Tento provoz|This venue|Dieser Betrieb
 Spotřeba = počáteční fyzický stav + příjmy a převody − konečný stav − evidované odpisy. S prodeji ji srovnáváme podle receptur platných v okamžiku prodeje. Upozornění používá toleranci 5 %.|Consumption = opening physical stock + receipts and transfers − closing stock − recorded waste. Sales are compared using recipes effective at the time of sale. Alerts use a 5% tolerance.|Verbrauch = körperlicher Anfangsbestand + Zugänge und Umlagerungen − Endbestand − erfasster Schwund. Der Verkaufsabgleich nutzt zum Verkaufszeitpunkt gültige Rezepturen. Hinweise verwenden eine Toleranz von 5 %.
 Pouze pro majitele. Částky pocházejí z importovaných uzávěrek; různé měny se nesčítají. Marže vyžaduje náklady zboží, odhad zisku také provozní náklady.|Owner only. Amounts come from imported closing summaries; different currencies are not added together. Margin requires cost of goods; estimated profit also requires operating costs.|Nur für Inhaber. Beträge stammen aus importierten Tagesabschlüssen; verschiedene Währungen werden nicht addiert. Die Marge erfordert Wareneinsatz, der geschätzte Gewinn zusätzlich Betriebskosten.
 Ve vybraných datech nebyla nalezena odchylka splňující pravidla. Pro statistické vyhodnocení je potřeba alespoň pět předchozích srovnatelných inventur.|No discrepancy meeting the rules was found. Statistical analysis requires at least five previous comparable inventories.|Es wurde keine Abweichung gefunden, die den Regeln entspricht. Für die statistische Auswertung sind mindestens fünf vorherige vergleichbare Inventuren erforderlich.
+Odpovědný manažer (volitelné)|Responsible manager (optional)|Verantwortlicher Manager (optional)
+Odpovědný manažer|Responsible manager|Verantwortlicher Manager
+Jméno manažera|Manager first name|Vorname des Managers
+Příjmení manažera|Manager last name|Nachname des Managers
+Přiřadit manažera|Assign manager|Manager zuweisen
+Upravit manažera|Edit manager|Manager bearbeiten
+Uložit manažera|Save manager|Manager speichern
+Nepřiřazen|Unassigned|Nicht zugewiesen
+Pro odebrání manažera ponechte obě pole prázdná.|Leave both fields empty to remove the manager.|Lassen Sie beide Felder leer, um den Manager zu entfernen.
+Vyplňte jméno i příjmení manažera, nebo ponechte obě pole prázdná.|Enter both manager names or leave both fields empty.|Geben Sie Vor- und Nachnamen des Managers ein oder lassen Sie beide Felder leer.
+Kontakt zaměstnance|Employee contact|Mitarbeiterkontakt
+Telefon zaměstnance (volitelné)|Employee phone (optional)|Telefon des Mitarbeiters (optional)
+E-mail zaměstnance (volitelné)|Employee email (optional)|E-Mail des Mitarbeiters (optional)
+Telefon zaměstnance|Employee phone|Telefon des Mitarbeiters
+E-mail zaměstnance|Employee email|E-Mail des Mitarbeiters
+Vytvoření profilu|Profile created|Profil erstellt
+Kontakt|Contact|Kontakt
+Zadejte platné telefonní číslo.|Enter a valid phone number.|Geben Sie eine gültige Telefonnummer ein.
+Zadejte platný e-mail zaměstnance.|Enter a valid employee email.|Geben Sie eine gültige E-Mail-Adresse des Mitarbeiters ein.
 Pozice|Position|Position
 Oprávnění zaměstnance|Employee permissions|Mitarbeiterberechtigungen
 Pozice a přednastavená oprávnění|Positions and permission presets|Positionen und Berechtigungsvorlagen
@@ -1163,7 +1182,7 @@ Tento PIN už v pracovním prostoru používá jiný zaměstnanec.|Another emplo
  if(el.tagName==='OPTION'&&!el.hasAttribute('value'))el.value=el.textContent;let saved=attributeSources.get(el);if(!saved){saved={};attributeSources.set(el,saved)}for(const attr of ['placeholder','aria-label','title']){if(!el.hasAttribute(attr))continue;const current=el.getAttribute(attr),prev=saved[attr],source=prev&&current===prev.output?prev.source:current,output=t(source);saved[attr]={source,output};if(current!==output)el.setAttribute(attr,output)}}
  function apply(root=document.body){if(!root)return;if(root.nodeType===3)return translateText(root);if(root.nodeType!==1)return;translateElement(root);const walker=document.createTreeWalker(root,NodeFilter.SHOW_ELEMENT|NodeFilter.SHOW_TEXT);let node;while((node=walker.nextNode())){if(node.nodeType===3)translateText(node);else translateElement(node)}}
  let control;
- function placeControl(){const parent=document.body.classList.contains('auth-screen')?document.querySelector('.auth-card'):document.querySelector('.owner-account,.account-info,.work-header .header-actions,.pin-intro');if(parent&&control.parentNode!==parent)parent.prepend(control)}
+ function placeControl(){const parent=document.body.classList.contains('auth-screen')?document.querySelector('.auth-card'):document.querySelector('[data-sidebar-language],.work-header .header-actions,.pin-intro');if(parent&&control.parentNode!==parent)parent.prepend(control)}
  function set(next){if(!supported.includes(next))return;language=next;try{localStorage.setItem(key,next)}catch{}document.documentElement.lang=next;if(control)control.querySelector('select').value=next;apply();apply(document.querySelector('title'));window.dispatchEvent(new CustomEvent('noira:language',{detail:{language:next,locale:locales[next]}}))}
  function start(){document.documentElement.lang=language;control=document.createElement('label');control.className='noira-language';control.setAttribute('translate','no');control.innerHTML='<span>Jazyk / Language / Sprache</span><select aria-label="Jazyk / Language / Sprache"><option value="cs">Čeština</option><option value="en">English</option><option value="de">Deutsch</option></select>';control.querySelector('select').value=language;control.querySelector('select').onchange=e=>set(e.target.value);placeControl();apply();apply(document.querySelector('title'));new MutationObserver(()=>apply(document.querySelector('title'))).observe(document.head,{subtree:true,childList:true,characterData:true});
   new MutationObserver(records=>{for(const record of records){if(record.type==='characterData')translateText(record.target);else if(record.type==='attributes')translateElement(record.target);else for(const node of record.addedNodes)apply(node)}placeControl()}).observe(document.body,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['placeholder','aria-label','title','class']});
@@ -1173,3 +1192,4 @@ Tento PIN už v pracovním prostoru používá jiný zaměstnanec.|Another emplo
  for(const method of ['confirm','alert']){const original=window[method].bind(window);window[method]=message=>original(t(String(message)))}
  return {t,apply,set,add,get language(){return language},get locale(){return locales[language]}};
 })();
+
