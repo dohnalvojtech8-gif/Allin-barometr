@@ -37,7 +37,8 @@ def observations(document):
             inbound=sum(m['qty'] for m in changes if m['reason'] in ('Příjem','Vratka','Přesun'))
             waste=-sum(m['qty'] for m in changes if m['reason']=='Odpis')
             issued=-sum(m['qty'] for m in changes if m['reason']=='Výdej')
-            consumed=previous['qty']+inbound-row['qty']-waste if previous is not None else None
+            same_unit=previous is not None and (previous.get('unit') or product.get('unit','ks'))==unit
+            consumed=previous['qty']+inbound-row['qty']-waste if same_unit else None
             result.append({'id':row['id'],'inventoryId':row.get('inventoryId') or row['id'],'kind':row.get('kind','warehouse'),'at':row['at'],
               'date':business_date(row['at']),'startAt':previous['at'] if previous else None,'storeId':store,'storeName':stores.get(store,store),
               'productId':pid,'productName':row.get('productName') or product.get('name',pid),'unit':unit,'qty':row['qty'],'expected':expected,

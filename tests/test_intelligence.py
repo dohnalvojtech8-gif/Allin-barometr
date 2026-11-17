@@ -146,3 +146,8 @@ def test_approval_order_prevents_double_counted_shortage(hub):
  assert client.post(url+second+'/decision',json={'action':'approve','revision':1},headers=vh).status_code==200
  approved=client.get(prefix+'/api/stock').json['data']['counts']
  assert next(r for r in approved if r.get('reviewId')==second)['expected']==90
+
+def test_consumption_does_not_compare_changed_units():
+ document=stock();document['counts']=[{'id':'old','store':'main','product':'flour','qty':100,'unit':'ks','at':'2026-01-01T10:00:00+00:00'},{'id':'new','store':'main','product':'flour','qty':1,'unit':'kg','at':'2026-01-02T10:00:00+00:00'}]
+ assert observations(document)[-1]['consumption'] is None
+ assert {r['unit'] for r in analyze(document)['byMonth']}=={'ks','kg'}

@@ -57,6 +57,8 @@ def reconcile(observations,sales,recipes,coverage,pos_days,products):
     for observation in observations:
         row={k:observation[k] for k in ('id','productId','productName','storeId','storeName','unit','date','startAt','at','consumption')}
         row.update(theoreticalConsumption=None,excessConsumption=None,status='missing_baseline',missingSalesCodes=[])
+        if catalog.get(observation['productId'],{}).get('unit',observation['unit'])!=observation['unit']:
+            row['status']='invalid_recipe';results.append(row);continue
         if observation['startAt'] is None or observation['consumption'] is None:results.append(row);continue
         start=timestamp(observation['startAt']);end=timestamp(observation['at'])
         days=list(day_range(business_date(observation['startAt']),business_date(observation['at'])))
