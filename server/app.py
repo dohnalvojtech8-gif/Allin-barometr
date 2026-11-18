@@ -800,6 +800,13 @@ def i18n_script():return send_from_directory(WEB,'i18n.js')
 
 
 
+@app.get('/motion.js')
+def motion_script():return send_from_directory(WEB,'motion.js')
+
+@app.get('/motion.css')
+def motion_styles():return send_from_directory(WEB,'motion.css')
+
+
 @app.get('/team.js')
 def team_script():return send_from_directory(WEB,'team.js')
 

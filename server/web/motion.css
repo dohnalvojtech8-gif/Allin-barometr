@@ -1,0 +1,32 @@
+/* Chosen motion variants, shared by owner, venue and work terminal. */
+:root{--motion-duration:240ms;--motion-easing:cubic-bezier(.2,.7,.2,1)}
+button[data-motion-busy],button[data-motion-success]{display:inline-flex;align-items:center;justify-content:center;gap:10px}
+button[data-motion-busy]::before{content:'';display:inline-block;flex:none;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:noira-spin .7s linear infinite}
+button[data-motion-success]::before,.motion-success-icon{content:'';display:inline-block;flex:none;width:14px;height:8px;border:solid currentColor;border-width:0 0 2px 2px;transform:rotate(-45deg);animation:noira-check-in .2s ease-out}
+.motion-success-icon{margin:0 12px 5px 1px;color:#b3d5ba}
+.venue-card{transition:background-color var(--motion-duration) var(--motion-easing)}
+.owner-hub .venue-card.motion-selected{background:#28261f}
+.motion-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+#motion-progress[hidden],[data-motion-contacts] label[hidden],[data-motion-add-field][hidden]{display:none!important}
+#motion-progress{position:fixed;top:calc(12px + env(safe-area-inset-top,0px));right:max(16px,env(safe-area-inset-right,0px));width:min(250px,calc(100vw - 32px));z-index:500;padding:12px 16px;background:#202326;color:#f6f0e6;border:1px solid #45423b;border-radius:12px;box-shadow:0 8px 28px #0003;pointer-events:none}
+.motion-progress-heading{display:flex;justify-content:space-between;gap:20px;font-size:12px;margin-bottom:9px}
+.motion-progress-track{height:4px;background:#353025;overflow:hidden;border-radius:8px}
+.motion-progress-fill{width:0;height:100%;background:#dfc18c;transition:width .16s ease}
+.motion-progress-error .motion-progress-fill{background:#ffb4a8}
+[data-motion-add-field]{grid-column:1/-1;justify-self:start;margin:4px 0 12px}
+[data-motion-contacts] label{min-width:0}
+[data-motion-contacts].motion-one-contact>label:not([hidden]){grid-column:1/-1}
+@media(max-width:480px){.two[data-motion-contacts]{grid-template-columns:1fr}}
+@keyframes noira-spin{to{transform:rotate(360deg)}}
+@keyframes noira-check-in{from{opacity:0;transform:rotate(-45deg) scale(.4)}to{opacity:1;transform:rotate(-45deg) scale(1)}}
+@media(max-width:760px){
+ .owner-content,.shell{transition:transform var(--motion-duration) var(--motion-easing);will-change:auto}
+ body.menu-open .owner-content,body.drawer-open .shell{transform:translateX(90px)}
+ body.menu-open,body.drawer-open{overflow-x:hidden}
+ body.drawer-open #sidebar-backdrop,body.menu-open #owner-backdrop{animation:noira-backdrop-in .24s ease-out}
+}
+@keyframes noira-backdrop-in{from{opacity:0}to{opacity:1}}
+@media(prefers-reduced-motion:reduce){
+ .owner-content,.shell,.venue-card,.motion-progress-fill{transition:none!important}
+ button[data-motion-busy]::before,button[data-motion-success]::before,.motion-success-icon,body.drawer-open #sidebar-backdrop,body.menu-open #owner-backdrop{animation:none!important}
+}

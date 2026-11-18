@@ -6,6 +6,11 @@ window.NoiraI18n=(()=>{
  const dictionary=new Map(),lowercase=new Map(),textSources=new WeakMap(),attributeSources=new WeakMap();
  function add(source,en,de){dictionary.set(source,[source,en,de]);lowercase.set(source.toLocaleLowerCase('cs'),[source,en,de])}
  const copy=`
+Přidat telefon zaměstnance|Add employee phone|Mitarbeitertelefon hinzufügen
+Přidat e-mail zaměstnance|Add employee email|Mitarbeiter-E-Mail hinzufügen
+Změny byly uloženy.|Changes saved.|Änderungen gespeichert.
+Načítání|Loading|Wird geladen
+Ukládám…|Saving…|Wird gespeichert…
 Inteligentní provozní analytika|Operational intelligence|Intelligente Betriebsanalyse
 Chytřejší vyhodnocení inventur|Smarter inventory analysis|Intelligente Inventurauswertung
 Kontrola inventur a schvalování|Inventory review and approval|Inventurprüfung und Freigabe
