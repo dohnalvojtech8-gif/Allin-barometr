@@ -103,3 +103,10 @@ body:not(.auth-screen)>aside#sidebar{display:flex!important;flex-direction:colum
 .employee-facts dt{color:#bdb4a4}.employee-facts dd{margin:0;overflow-wrap:anywhere}
 .employee-contacts h2{margin-bottom:20px}
 @media(max-width:480px){.venue-manager{align-items:flex-start;flex-direction:column}.manager-fields .two{grid-template-columns:1fr;gap:0}.employee-facts{grid-template-columns:1fr;gap:6px}.employee-facts dd{margin-bottom:12px}}
+
+/* Owners can leave any venue without ending either session. */
+.owner-return-sidebar,.owner-return-header{display:inline-flex;align-items:center;gap:8px;min-height:44px;color:#dfc18c;text-decoration:none;border:1px solid #655b45;border-radius:9px;padding:10px 13px;font-size:14px;line-height:1.5}
+.owner-return-sidebar{margin:0 0 16px;width:100%;justify-content:center}
+.owner-return-header{flex:none;white-space:nowrap}
+.owner-return-sidebar:hover,.owner-return-header:hover{background:#343025;color:#f3dfb9}
+@media(max-width:760px){.owner-return-header{font-size:13px;padding:8px 10px}.venue-owner .app-header .account-name{display:none}.venue-owner .app-header .account-info{margin-left:0}.venue-owner .app-header .owner-return-header{margin-left:auto}}

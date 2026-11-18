@@ -6,6 +6,9 @@ window.NoiraI18n=(()=>{
  const dictionary=new Map(),lowercase=new Map(),textSources=new WeakMap(),attributeSources=new WeakMap();
  function add(source,en,de){dictionary.set(source,[source,en,de]);lowercase.set(source.toLocaleLowerCase('cs'),[source,en,de])}
  const copy=`
+← Zpět do panelu majitele|← Back to owner panel|← Zurück zum Inhaberbereich
+Zpět do panelu majitele|Back to owner panel|Zurück zum Inhaberbereich
+← Majitel|← Owner|← Inhaber
 Nutné doplnit skladové zásoby!|Stock replenishment required!|Lagerbestände müssen aufgefüllt werden!
 Tyto produkty dosáhly nastaveného minima nebo klesly pod něj.|These products reached or fell below the configured minimum.|Diese Produkte haben den Mindestbestand erreicht oder unterschritten.
 Minimální zásoba (volitelné)|Minimum stock (optional)|Mindestbestand (optional)

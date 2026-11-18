@@ -1,6 +1,12 @@
 'use strict';
 (async () => {
-const auth=window.BarometrAuth;const session=await auth.gate();if(!session)return;const account=session.user;const isAdmin=account.role==='admin';const can=key=>key==='inventory.inbox'?(isAdmin||(account.permissions?.['stock.view']===true&&['inventory.run','inventory.history','inventory.review'].some(k=>account.permissions?.[k]===true))):isAdmin||(account.permissions?.[key]===true&&(!['inventory.bar','inventory.warehouse'].includes(key)||account.permissions?.['inventory.run']===true));const canManageUsers=can('users.manage');const freeUnlocks=session.freeUnlocks===true;const canUseBottles=isAdmin||freeUnlocks;const products=(can('catalog.view')||can('inventory.bar'))?(await auth.api('/api/catalog')).products:[];document.querySelector('.account-name').textContent=account.username;
+const auth=window.BarometrAuth;const session=await auth.gate();if(!session)return;const account=session.user;const isAdmin=account.role==='admin';const can=key=>key==='inventory.inbox'?(isAdmin||(account.permissions?.['stock.view']===true&&['inventory.run','inventory.history','inventory.review'].some(k=>account.permissions?.[k]===true))):isAdmin||(account.permissions?.[key]===true&&(!['inventory.bar','inventory.warehouse'].includes(key)||account.permissions?.['inventory.run']===true));const canManageUsers=can('users.manage');const freeUnlocks=session.freeUnlocks===true;const canUseBottles=isAdmin||freeUnlocks;if(isAdmin&&window.BarometrVenuePrefix){
+ document.body.classList.add('venue-owner');
+ for(const [selector,placement,classes,label] of [['#sidebar .logo','after','owner-return-sidebar','← Zpět do panelu majitele'],['.app-header .account-info','before','owner-return-header','← Majitel']]){
+  const target=document.querySelector(selector);if(!target)continue;const link=document.createElement('a');link.href='/#overview';link.className=classes;link.setAttribute('aria-label','Zpět do panelu majitele');link.textContent=label;target[placement](link);
+ }
+}
+const products=(can('catalog.view')||can('inventory.bar'))?(await auth.api('/api/catalog')).products:[];document.querySelector('.account-name').textContent=account.username;
 const byId=new Map(products.map(p=>[p.id,p]));
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
