@@ -1,4 +1,5 @@
 """Owner operational analytics with explicit POS coverage and versioned recipes."""
+from server.coowners import owner_scope
 import csv
 import io
 import json
@@ -99,7 +100,7 @@ def register(app):
                 execute(c,'ALTER TABLE '+table+' ENABLE ROW LEVEL SECURITY');execute(c,'REVOKE ALL ON '+table+' FROM PUBLIC')
                 if SUPABASE_DATABASE_URL:execute(c,'REVOKE ALL ON '+table+' FROM anon,authenticated')
     def owned(c,id):
-        venue=one(c,'SELECT * FROM allin_venues WHERE id=%s AND owner_id=%s',(id,g.user['id']))
+        venue=one(c,'SELECT * FROM allin_venues WHERE id=%s AND owner_id=%s',(id,owner_scope()))
         if not venue:raise ApiError('Provoz neexistuje nebo k němu nemáte přístup.',404)
         return venue
     def period(values):
@@ -128,7 +129,7 @@ def register(app):
         previous_last=(date.fromisoformat(first)-timedelta(days=1)).isoformat();previous_first=(date.fromisoformat(first)-timedelta(days=span)).isoformat()
         with db(central=True) as c:
             if selected:owned(c,selected)
-            venues=allrows(c,'SELECT * FROM allin_venues WHERE owner_id=%s ORDER BY created_at,id',(g.user['id'],))
+            venues=allrows(c,'SELECT * FROM allin_venues WHERE owner_id=%s ORDER BY created_at,id',(owner_scope(),))
         results=[]
         for venue in venues:
             if selected and venue['id']!=selected:continue

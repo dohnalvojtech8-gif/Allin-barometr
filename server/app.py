@@ -101,6 +101,7 @@ def init_db(seed_admins=True):
         if 'permission_overrides_json' not in columns:execute(c,"ALTER TABLE users ADD COLUMN permission_overrides_json TEXT NOT NULL DEFAULT '{}'")
         if 'permissions_json' not in columns:execute(c,"ALTER TABLE users ADD COLUMN permissions_json TEXT NOT NULL DEFAULT '{}'")
         if 'stock_owner_id' not in columns:execute(c,'ALTER TABLE users ADD COLUMN stock_owner_id TEXT REFERENCES users(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED')
+        execute(c,'CREATE INDEX IF NOT EXISTS users_stock_owner ON users(stock_owner_id)')
         if not TEST_DB:
             for table in allrows(c,"SELECT tablename FROM pg_tables WHERE schemaname=current_schema()"):
                 name=table['tablename']
@@ -190,6 +191,11 @@ def textfield(data,key,minimum=1,maximum=64):
     return v
 from server.permissions import has_permission, effective_permissions, PERMISSIONS
 
+from server.coowners import owner_scope, valid_owner
+
+def workspace_id():
+    return owner_scope() if getattr(g,'venue',None) and g.user['role']=='admin' else g.user['id']
+
 def cookie_name():
     venue=getattr(g,'venue',None)
     return COOKIE+'_'+venue['id'] if venue else COOKIE
@@ -205,8 +211,12 @@ def authenticated(admin=False,bottles=False,permission=None):
                 if getattr(g,'venue',None) and row['role']=='admin':
                     # Owner entry is tied to a live central session on this browser.
                     with db(central=True) as owner_db:
-                        owner_session=one(owner_db,"SELECT s.user_id FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=%s AND s.expires_at>%s AND u.status='active'",(digest(request.cookies.get(COOKIE,'')),time.time()))
-                    if not owner_session or owner_session['user_id']!=g.venue['owner_id'] or row['id']!=g.venue['owner_id']:raise ApiError('Přihlaste se do centrálního panelu majitele.',401)
+                        owner_session=one(owner_db,"SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=%s AND s.expires_at>%s AND u.status='active' AND u.role='admin'",(digest(request.cookies.get(COOKIE,'')),time.time()))
+                    if not owner_session or owner_session['id']!=row['id'] or not valid_owner(owner_session,g.venue):raise ApiError('Přihlaste se do centrálního panelu majitele.',401)
+                if row['role']=='admin' and not getattr(g,'venue',None) and not valid_owner(row):raise ApiError('Přístup majitele byl pozastaven.',401)
+                if row['role']=='admin' and row.get('stock_owner_id') and getattr(g,'venue',None):
+                    shared=one(c,'SELECT state_json FROM users WHERE id=%s',(row['stock_owner_id'],))
+                    row['state_json']=shared['state_json']
                 if permission and not has_permission(row,permission):raise ApiError('K této akci nemáte oprávnění.',403)
                 if admin and row['role']!='admin':raise ApiError('Tato akce je dostupná pouze administrátorům.',403)
                 if bottles and permission!='catalog.unlock' and not (has_permission(row,'inventory.run') and has_permission(row,'inventory.bar')):raise ApiError('Nemáte oprávnění provádět inventury baru.',403)
@@ -276,7 +286,7 @@ def register():
 @authenticated()
 def me():
     with db() as c:
-        unlocked=allrows(c,'SELECT product_id,created_at FROM unlocks WHERE user_id=%s',(g.user['id'],))
+        unlocked=allrows(c,'SELECT product_id,created_at FROM unlocks WHERE user_id=%s',(workspace_id(),))
         state=json.loads(g.user['state_json']);state.update(unlocks={r['product_id']:{'reason':'free','paid':0,'at':r['created_at']*1000} for r in unlocked},ownerPreview=g.user['role']=='admin')
         return jsonify(user=public_user(g.user),csrf=g.user['csrf'],state=state,freeUnlocks=FREE_UNLOCKS)
 @app.post('/api/logout')
@@ -293,7 +303,7 @@ def catalog():
 @authenticated(permission='catalog.view')
 def shop_offers():
     current=choose_week(SHOP_TEMPLATES)
-    with db() as c:owned={r['product_id'] for r in allrows(c,'SELECT product_id FROM unlocks WHERE user_id=%s',(g.user['id'],))}
+    with db() as c:owned={r['product_id'] for r in allrows(c,'SELECT product_id FROM unlocks WHERE user_id=%s',(workspace_id(),))}
     current['offers']=[quote(t,PRODUCTS,owned) for t in current['offers']]
     return jsonify(**current,templateCount=len(SHOP_TEMPLATES),paymentsEnabled=False,freeUnlocks=FREE_UNLOCKS,adminFree=g.user['role']=='admin')
 @app.post('/api/shop/bundles/<bundle_id>/unlock')
@@ -307,7 +317,7 @@ def unlock_bundle(bundle_id):
     added=0
     with db() as c:
         for product_id in template['productIds']:
-            added+=execute(c,'INSERT INTO unlocks (user_id,product_id,created_at) VALUES (%s,%s,%s) ON CONFLICT (user_id,product_id) DO NOTHING',(g.user['id'],product_id,time.time())).rowcount
+            added+=execute(c,'INSERT INTO unlocks (user_id,product_id,created_at) VALUES (%s,%s,%s) ON CONFLICT (user_id,product_id) DO NOTHING',(workspace_id(),product_id,time.time())).rowcount
         if added:audit(c,g.user['id'],'bundle_unlocked',template['title'])
     return jsonify(ok=True,productIds=template['productIds'],addedCount=added,paidCents=0,currency='EUR')
 @app.post('/api/unlocks')
@@ -317,7 +327,7 @@ def unlock():
     id=body().get('productId')
     if id not in PRODUCTS:raise ApiError('Produkt neexistuje.',404)
     with db() as c:
-        n=execute(c,'INSERT INTO unlocks (user_id,product_id,created_at) VALUES (%s,%s,%s) ON CONFLICT (user_id,product_id) DO NOTHING',(g.user['id'],id,time.time())).rowcount
+        n=execute(c,'INSERT INTO unlocks (user_id,product_id,created_at) VALUES (%s,%s,%s) ON CONFLICT (user_id,product_id) DO NOTHING',(workspace_id(),id,time.time())).rowcount
         if n:audit(c,g.user['id'],'product_unlocked',PRODUCTS[id]['name'])
     return jsonify(ok=True)
 @app.get('/api/products/<id>')
@@ -326,7 +336,7 @@ def product(id):
     if not (has_permission(g.user,'catalog.view') or (has_permission(g.user,'inventory.run') and has_permission(g.user,'inventory.bar'))):raise ApiError('Nemáte oprávnění otevřít produkt.',403)
     if id not in PRODUCTS:raise ApiError('Produkt neexistuje.',404)
     with db() as c:
-        if not (FREE_UNLOCKS or g.user['role']=='admin') or not one(c,'SELECT product_id FROM unlocks WHERE user_id=%s AND product_id=%s',(g.user['id'],id)):raise ApiError('Nejdříve odemkněte produkt.',403)
+        if not (FREE_UNLOCKS or g.user['role']=='admin') or not one(c,'SELECT product_id FROM unlocks WHERE user_id=%s AND product_id=%s',(workspace_id(),id)):raise ApiError('Nejdříve odemkněte produkt.',403)
         audit(c,g.user['id'],'product_opened',PRODUCTS[id]['name'])
     return jsonify(PRODUCTS[id])
 @app.get('/api/barcode/<code>')
@@ -358,15 +368,15 @@ def calibration_profile(product_id,capacity):
     from server.calibration import validate_points,CalibrationError
     if product_id not in PRODUCTS or capacity not in [v['ml'] for v in PRODUCTS[product_id]['variants']]:raise ApiError('Neplatná varianta lahve.')
     with db() as c:
-        if not one(c,'SELECT product_id FROM unlocks WHERE user_id=%s AND product_id=%s',(g.user['id'],product_id)):raise ApiError('Nejdříve odemkněte produkt.',403)
+        if not one(c,'SELECT product_id FROM unlocks WHERE user_id=%s AND product_id=%s',(workspace_id(),product_id)):raise ApiError('Nejdříve odemkněte produkt.',403)
         if request.method=='PUT':
             data=body()
             if data.get('measured') is not True:raise ApiError('Potvrďte vlastní měření referenčních bodů.')
             try:points=validate_points(data.get('points'),capacity)
             except CalibrationError as error:raise ApiError(str(error))
-            execute(c,'INSERT INTO bottle_calibrations (user_id,product_id,capacity,points_json,updated_at) VALUES (%s,%s,%s,%s,%s) ON CONFLICT (user_id,product_id,capacity) DO UPDATE SET points_json=excluded.points_json,updated_at=excluded.updated_at',(g.user['id'],product_id,capacity,json.dumps(points),time.time()))
+            execute(c,'INSERT INTO bottle_calibrations (user_id,product_id,capacity,points_json,updated_at) VALUES (%s,%s,%s,%s,%s) ON CONFLICT (user_id,product_id,capacity) DO UPDATE SET points_json=excluded.points_json,updated_at=excluded.updated_at',(workspace_id(),product_id,capacity,json.dumps(points),time.time()))
             audit(c,g.user['id'],'calibration_saved',PRODUCTS[product_id]['name']+' · '+str(capacity)+' ml')
-        profile=read_calibration(c,g.user['id'],product_id,capacity)
+        profile=read_calibration(c,workspace_id(),product_id,capacity)
     return jsonify(profile=profile)
 @app.get('/api/vision/status')
 @authenticated(admin=True)
@@ -380,8 +390,8 @@ def vision_analyze():
     data=body();product_id=data.get('productId');capacity=data.get('capacity')
     if not isinstance(product_id,str) or product_id not in PRODUCTS or capacity not in [v['ml'] for v in PRODUCTS[product_id]['variants']]:raise ApiError('Neplatný produkt nebo objem.')
     with db() as c:
-        unlocked=one(c,'SELECT product_id FROM unlocks WHERE user_id=%s AND product_id=%s',(g.user['id'],product_id))
-        profile=read_calibration(c,g.user['id'],product_id,capacity)
+        unlocked=one(c,'SELECT product_id FROM unlocks WHERE user_id=%s AND product_id=%s',(workspace_id(),product_id))
+        profile=read_calibration(c,workspace_id(),product_id,capacity)
     if not unlocked:raise ApiError('Nejdřív odemkněte produkt.',403)
     if not configuration()['enabled']:raise ApiError('Automatický skener není připojený. Administrátor musí nastavit a povolit analýzu obrazu.',503)
     rate_limit(['vision:'+g.user['id']],60,3600)
@@ -401,15 +411,15 @@ def put_scan_photo(photo_id):
     if not raw.startswith(b'\xff\xd8') or not raw.endswith(b'\xff\xd9'):raise ApiError('Snímek musí být JPEG.')
     with db() as c:
         existing=one(c,'SELECT user_id FROM scan_photos WHERE id=%s',(photo_id,))
-        if existing and existing['user_id']!=g.user['id']:raise ApiError('Snímek není dostupný.',404)
-        execute(c,'INSERT INTO scan_photos (id,user_id,jpeg,created_at) VALUES (%s,%s,%s,%s) ON CONFLICT (id) DO UPDATE SET jpeg=excluded.jpeg WHERE scan_photos.user_id=excluded.user_id',(photo_id,g.user['id'],image,time.time()))
+        if existing and existing['user_id']!=workspace_id():raise ApiError('Snímek není dostupný.',404)
+        execute(c,'INSERT INTO scan_photos (id,user_id,jpeg,created_at) VALUES (%s,%s,%s,%s) ON CONFLICT (id) DO UPDATE SET jpeg=excluded.jpeg WHERE scan_photos.user_id=excluded.user_id',(photo_id,workspace_id(),image,time.time()))
     return jsonify(id=photo_id)
 @app.get('/api/scan-photos/<photo_id>')
 @authenticated()
 def get_scan_photo(photo_id):
     import base64
     if not (has_permission(g.user,'inventory.history') or (has_permission(g.user,'inventory.run') and has_permission(g.user,'inventory.bar'))):raise ApiError('Nemáte oprávnění prohlížet snímky inventur.',403)
-    with db() as c:photo=one(c,'SELECT jpeg FROM scan_photos WHERE id=%s AND user_id=%s',(photo_id,g.user['id']))
+    with db() as c:photo=one(c,'SELECT jpeg FROM scan_photos WHERE id=%s AND user_id=%s',(photo_id,workspace_id()))
     if not photo:raise ApiError('Snímek nebyl nalezen.',404)
     response=make_response(base64.b64decode(photo['jpeg'].split(',',1)[1]));response.headers['Content-Type']='image/jpeg';response.headers['Cache-Control']='private, no-store';return response
 
@@ -433,7 +443,7 @@ def put_state():
     if FREE_UNLOCKS or g.user['role']=='admin':
         rows=data.get('rows',old.get('rows',[]));records=data.get('records',old.get('records',[]))
         if not isinstance(rows,list) or len(rows)>500 or not isinstance(records,list) or len(records)>3000:raise ApiError('Příliš mnoho záznamů.')
-        with db() as c:ids={r['product_id'] for r in allrows(c,'SELECT product_id FROM unlocks WHERE user_id=%s',(g.user['id'],))}
+        with db() as c:ids={r['product_id'] for r in allrows(c,'SELECT product_id FROM unlocks WHERE user_id=%s',(workspace_id(),))}
         seen=set()
         for row in rows:
             if not isinstance(row,dict) or row.get('productId') not in ids or row.get('id') in seen:raise ApiError('Neplatná nebo neodemčená lahev.')
@@ -471,7 +481,7 @@ def put_state():
     else:clean.update(rows=[],records=[])
     clean['inventoryPlan']=plan
     with db() as c:
-        changed=execute(c,'UPDATE users SET state_json=%s WHERE id=%s AND state_json=%s',(json.dumps(clean,ensure_ascii=False),g.user['id'],g.user['state_json'])).rowcount
+        changed=execute(c,'UPDATE users SET state_json=%s WHERE id=%s AND state_json=%s',(json.dumps(clean,ensure_ascii=False),workspace_id(),g.user['state_json'])).rowcount
         if changed!=1:raise ApiError('Inventura byla mezitím změněna. Obnovte stránku a změnu zopakujte.',409)
         if clean.get('rows')!=old.get('rows') or clean.get('records')!=old.get('records'):audit(c,g.user['id'],'inventory_saved','Uložení inventury')
         elif clean.get('inventoryPlan')!=old.get('inventoryPlan'):audit(c,g.user['id'],'inventory_plan_changed','Změna pořadí nebo průběhu inventury')
@@ -690,8 +700,9 @@ def user_permissions(id):
         previous=effective_permissions(target)
         owner_id=input_data.get('stockOwnerId',target.get('stock_owner_id')) or None
         if owner_id is not None:
-            owner=one(c,"SELECT id FROM users WHERE id=%s AND role='admin'",(owner_id,))
+            owner=one(c,"SELECT * FROM users WHERE id=%s AND role='admin'",(owner_id,))
             if not owner:raise ApiError('Pracovní prostor musí patřit existujícímu majiteli.')
+            owner_id=owner_scope(owner)
         execute(c,'UPDATE users SET permissions_json=%s,stock_owner_id=%s WHERE id=%s',(json.dumps(permissions),owner_id,id))
         execute(c,'INSERT INTO stock_change_log (id,owner_id,actor_id,actor_name,store_id,store_name,entity_id,kind,label,field,before_json,after_json,revision,created_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,0,%s)',(uid(),id,g.user['id'],g.user['username'],'','',id,'oprávnění',target['username'],'permissions',json.dumps(previous),json.dumps(permissions),time.time()))
         if owner_id!=target.get('stock_owner_id'):audit(c,g.user['id'],'workspace_changed','Změna přístupu ke skladům účtu '+target['username'])
@@ -780,6 +791,8 @@ def premium_theme():
 
 from server.allin import register as register_allin
 register_allin(app)
+from server.coowners import register as register_coowners
+register_coowners(app)
 from server.notifications import register as register_notifications
 register_notifications(app)
 from server.pos import register as register_pos

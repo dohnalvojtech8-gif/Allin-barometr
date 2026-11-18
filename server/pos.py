@@ -1,4 +1,5 @@
 """Owner-only daily POS summaries. CSV ingestion is live; provider APIs need partner access."""
+from server.coowners import owner_scope
 import csv
 import io
 import json
@@ -89,11 +90,11 @@ def register(app):
                 if SUPABASE_DATABASE_URL:execute(c,'REVOKE ALL ON '+name+' FROM anon,authenticated')
 
     def own(c,venue_id):
-        row=one(c,'SELECT * FROM allin_venues WHERE id=%s AND owner_id=%s',(venue_id,g.user['id']))
+        row=one(c,'SELECT * FROM allin_venues WHERE id=%s AND owner_id=%s',(venue_id,owner_scope()))
         if not row:raise ApiError('Provoz neexistuje nebo k němu nemáte přístup.',404)
         return row
     def filters():
-        conditions=['v.owner_id=%s'];args=[g.user['id']]
+        conditions=['v.owner_id=%s'];args=[owner_scope()]
         venue=request.args.get('venue','')
         if venue:
             with db(central=True) as c:own(c,venue)
@@ -118,7 +119,7 @@ def register(app):
     @authenticated(admin=True)
     def pos_status():
         with db(central=True) as c:
-            venues=allrows(c,'SELECT v.*,p.provider,p.register_label,p.updated_at AS configured_at FROM allin_venues v LEFT JOIN pos_connections p ON p.venue_id=v.id WHERE v.owner_id=%s ORDER BY v.created_at,v.id',(g.user['id'],))
+            venues=allrows(c,'SELECT v.*,p.provider,p.register_label,p.updated_at AS configured_at FROM allin_venues v LEFT JOIN pos_connections p ON p.venue_id=v.id WHERE v.owner_id=%s ORDER BY v.created_at,v.id',(owner_scope(),))
             for v in venues:
                 v['latestResults']=allrows(c,"SELECT business_date,currency,SUM(revenue_net) AS revenue_net,SUM(CASE WHEN cogs IS NULL OR operating_costs IS NULL THEN 1 ELSE 0 END) AS missing,SUM(CASE WHEN cogs IS NOT NULL AND operating_costs IS NOT NULL THEN revenue_net-cogs-operating_costs ELSE 0 END) AS profit,COUNT(*) AS registers FROM pos_days WHERE venue_id=%s AND business_date=(SELECT MAX(business_date) FROM pos_days WHERE venue_id=%s) GROUP BY business_date,currency ORDER BY currency",(v['id'],v['id']))
                 for day in v['latestResults']:
@@ -191,7 +192,7 @@ def register(app):
     @authenticated(admin=True)
     def pos_day_detail(day_id):
         with db(central=True) as c:
-            day=one(c,'SELECT d.*,v.name AS venue_name FROM pos_days d JOIN allin_venues v ON v.id=d.venue_id WHERE d.id=%s AND v.owner_id=%s',(day_id,g.user['id']))
+            day=one(c,'SELECT d.*,v.name AS venue_name FROM pos_days d JOIN allin_venues v ON v.id=d.venue_id WHERE d.id=%s AND v.owner_id=%s',(day_id,owner_scope()))
             if not day:raise ApiError('Denní souhrn neexistuje.',404)
             revisions=allrows(c,'SELECT revision,data_json,created_at FROM pos_revisions WHERE day_id=%s ORDER BY revision DESC',(day_id,))
         return jsonify(day=public_day(day),revisions=[{'revision':r['revision'],'data':json.loads(r['data_json']),'created_at':r['created_at']} for r in revisions])

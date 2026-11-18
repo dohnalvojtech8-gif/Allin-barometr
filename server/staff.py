@@ -1,4 +1,5 @@
 """Venue job presets and an indexed, private employee login directory."""
+from server.coowners import owner_scope
 import json
 import re
 from flask import g, request, jsonify, has_request_context
@@ -128,7 +129,7 @@ def register(app):
 
     def positions(venue_id=None,position_id=None):
         if venue_id:
-            with db(central=True) as c:venue=one(c,'SELECT * FROM allin_venues WHERE id=%s AND owner_id=%s',(venue_id,g.user['id']))
+            with db(central=True) as c:venue=one(c,'SELECT * FROM allin_venues WHERE id=%s AND owner_id=%s',(venue_id,owner_scope()))
             if not venue:raise ApiError('Provoz neexistuje nebo k němu nemáte přístup.',404)
         else:venue=getattr(g,'venue',None)
         with venue_context(venue),db() as c:

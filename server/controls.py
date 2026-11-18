@@ -1,4 +1,5 @@
 """Owner-controlled opening hours and explainable stock attention cases."""
+from server.coowners import owner_scope
 import hashlib
 import json
 import math
@@ -125,7 +126,7 @@ def register(app):
                 execute(c,'ALTER TABLE '+table+' ENABLE ROW LEVEL SECURITY');execute(c,'REVOKE ALL ON '+table+' FROM PUBLIC')
                 if SUPABASE_DATABASE_URL:execute(c,'REVOKE ALL ON '+table+' FROM anon,authenticated')
     def owned(c,id):
-        venue=one(c,'SELECT * FROM allin_venues WHERE id=%s AND owner_id=%s',(id,g.user['id']))
+        venue=one(c,'SELECT * FROM allin_venues WHERE id=%s AND owner_id=%s',(id,owner_scope()))
         if not venue:raise ApiError('Provoz neexistuje nebo k němu nemáte přístup.',404)
         return venue
     def evaluate(venue):
@@ -144,14 +145,14 @@ def register(app):
                     hours=validate_hours(values.get('openingHours',json.loads(venue['opening_hours_json'])))
                     limits=validate_limits(values.get('limits',json.loads(venue['attention_limits_json'])))
                 except (ValueError,TypeError) as error:raise ApiError(str(error))
-                execute(c,'UPDATE allin_venues SET opening_hours_json=%s,attention_limits_json=%s WHERE id=%s AND owner_id=%s',(json.dumps(hours),json.dumps(limits),venue_id,g.user['id']))
+                execute(c,'UPDATE allin_venues SET opening_hours_json=%s,attention_limits_json=%s WHERE id=%s AND owner_id=%s',(json.dumps(hours),json.dumps(limits),venue_id,owner_scope()))
                 audit(c,g.user['id'],'venue_controls_changed','Nastavení provozní doby a limitů: '+venue['name'])
             else:hours=json.loads(venue['opening_hours_json']);limits=validate_limits(json.loads(venue['attention_limits_json']))
         return jsonify(openingHours=hours,limits=limits)
     @app.get('/api/owner/attention')
     @authenticated(admin=True)
     def attention():
-        with db(central=True) as c:venues=allrows(c,'SELECT * FROM allin_venues WHERE owner_id=%s ORDER BY name,id',(g.user['id'],))
+        with db(central=True) as c:venues=allrows(c,'SELECT * FROM allin_venues WHERE owner_id=%s ORDER BY name,id',(owner_scope(),))
         rows=[]
         for venue in venues:
             if request.args.get('venue') and request.args['venue']!=venue['id']:continue

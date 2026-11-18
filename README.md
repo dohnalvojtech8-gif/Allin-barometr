@@ -133,3 +133,10 @@ Majitel má navíc souhrn tržeb, hrubé marže a odhadu zisku po měnách, se s
 Push oznámení o čekající inventuře dostávají pouze přihlášená zařízení majitele a oprávněných schvalovatelů se správným rozsahem skladů a zapnutými oznámeními. Kontrola inventur funguje i bez push. Nové soukromé tabulky mají RLS a odebraná oprávnění veřejných rolí.
 
 Ověření v GitHub Actions: python -m pytest -q, kompilace Pythonu a kontrola syntaxe JavaScriptu. Vývojová větev se nenasazuje do Renderu před dokončením kontrol.
+
+### Spolumajitelé
+V panelu majitele → Uživatelé a přístupy → Přidat spolumajitele lze vytvořit další účet s vlastním heslem a volitelným telefonem/e-mailem. Spolumajitel sdílí všechny stávající i budoucí provozy, sklady, inventury, katalog a kalibrace. Události a skladové změny nadále evidují skutečného autora. Každý majitel si mění vlastní heslo.
+
+V centrální tabulce users označuje stock_owner_id u dalších adminů hlavního majitele; nezávislé účty s NULL zůstávají oddělené. Provozy a skladové dokumenty patří hlavnímu majiteli, lokální kopie účtů mají náhodná hesla a nepřebírají centrální přihlašovací heslo. Hlavní majitel může pozastavit nebo obnovit přístup spolumajitele. Pozastavení ruší jeho centrální i provozní relace a přihlášení do terminálu; členství se navíc kontroluje centrálně při každém požadavku i přihlášení PINem. Každý spolumajitel může přidat dalšího spolumajitele do stejné skupiny, ale nemůže blokovat hlavního majitele.
+
+Ověření: `python -m pytest -q tests/test_coowners.py` a `node tests/coowners-browser.cjs` proti izolovanému lokálnímu serveru.

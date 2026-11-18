@@ -1,8 +1,8 @@
 """Owner hub and independent venue databases. Never accept a client supplied SQL schema."""
+from server.coowners import owner_scope
 import json
 import os
 import re
-import secrets
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -25,10 +25,14 @@ class VenueMount:
         return self.application(environ,start_response)
 
 @contextmanager
-def venue_context(venue):
+def venue_context(venue, provision=True):
     previous=getattr(g,'venue',None)
     g.venue=venue
-    try:yield
+    try:
+        if provision and venue:
+            from server.coowners import provision_owner
+            provision_owner(venue)
+        yield
     finally:g.venue=previous
 
 def install_context(app):
@@ -66,12 +70,12 @@ def install_context(app):
 
 def register(app):
     from server.app import (authenticated,db,execute,one,allrows,ApiError,body,textfield,uid,
-        init_db,seed_shop,public_user,password_hash,session_response,WEB,TEST_DB,COOKIE,SECURE,audit)
+        init_db,seed_shop,public_user,session_response,WEB,TEST_DB,COOKIE,SECURE,audit)
     from server.permissions import PERMISSIONS
     from server.stock import current_quantity,at_minimum,low_stock
 
     def owned(venue_id):
-        with db(central=True) as c:venue=one(c,'SELECT * FROM allin_venues WHERE id=%s AND owner_id=%s',(venue_id,g.user['id']))
+        with db(central=True) as c:venue=one(c,'SELECT * FROM allin_venues WHERE id=%s AND owner_id=%s',(venue_id,owner_scope()))
         if not venue:raise ApiError('Provoz neexistuje nebo k němu nemáte přístup.',404)
         return venue
 
@@ -121,7 +125,7 @@ def register(app):
     @app.get('/api/owner/venues')
     @authenticated(admin=True)
     def venues():
-        with db(central=True) as c:rows=allrows(c,'SELECT * FROM allin_venues WHERE owner_id=%s ORDER BY created_at,id',(g.user['id'],))
+        with db(central=True) as c:rows=allrows(c,'SELECT * FROM allin_venues WHERE owner_id=%s ORDER BY created_at,id',(owner_scope(),))
         return jsonify(venues=[summary(v) for v in rows])
 
     @app.post('/api/owner/venues')
@@ -129,7 +133,7 @@ def register(app):
     def create():
         values=body();name=textfield(values,'name',1,100);address=textfield({'address':values.get('address','')},'address',0,200)
         first,last=manager_values(values)
-        venue={'manager_first_name':first,'manager_last_name':last,'id':uid(),'owner_id':g.user['id'],'name':name,'address':address,'created_at':time.time()}
+        venue={'manager_first_name':first,'manager_last_name':last,'id':uid(),'owner_id':owner_scope(),'name':name,'address':address,'created_at':time.time()}
         # Provision first; publish the venue only after the private database is ready.
         schema='venue_'+venue['id'].replace('-','')
         if not TEST_DB:
@@ -137,14 +141,14 @@ def register(app):
                 execute(c,'CREATE SCHEMA '+schema)
                 execute(c,'REVOKE ALL ON SCHEMA '+schema+' FROM PUBLIC')
         try:
-            with venue_context(venue):
+            with venue_context(venue, provision=False):
                 init_db(seed_admins=False)
+                from server.coowners import provision_owner
+                provision_owner(venue, force=True)
                 with db() as c:
                     actor=g.user
-                    execute(c,"INSERT INTO users (id,username,username_key,first_name,last_name,password_hash,role,created_at) VALUES (%s,%s,%s,%s,%s,%s,'admin',%s)",
-                        (actor['id'],actor['username'],actor['username_key'],actor['first_name'],actor['last_name'],password_hash(secrets.token_urlsafe(48)),time.time()))
                     initial={'stores':[{'id':'main','name':'Hlavní sklad'}],'products':[],'counts':[],'moves':[],'draft':None,'barInventories':[],'barDraft':None}
-                    execute(c,'INSERT INTO stock_documents (user_id,revision,data_json,updated_at) VALUES (%s,0,%s,%s)',(actor['id'],json.dumps(initial),time.time()))
+                    execute(c,'INSERT INTO stock_documents (user_id,revision,data_json,updated_at) VALUES (%s,0,%s,%s)',(venue['owner_id'],json.dumps(initial),time.time()))
                     audit(c,actor['id'],'venue_created','Vytvoření provozu '+name)
                 seed_shop()
             with db(central=True) as c:
@@ -163,7 +167,7 @@ def register(app):
     def update_manager(venue_id):
         venue=owned(venue_id);first,last=manager_values(body())
         with db(central=True) as c:
-            execute(c,'UPDATE allin_venues SET manager_first_name=%s,manager_last_name=%s WHERE id=%s AND owner_id=%s',(first,last,venue_id,g.user['id']))
+            execute(c,'UPDATE allin_venues SET manager_first_name=%s,manager_last_name=%s WHERE id=%s AND owner_id=%s',(first,last,venue_id,owner_scope()))
             audit(c,g.user['id'],'venue_manager_changed','Změna odpovědného manažera provozu '+venue['name'])
         return jsonify(ok=True)
 
@@ -184,7 +188,7 @@ def register(app):
     @app.get('/api/owner/activity')
     @authenticated(admin=True)
     def owner_activity():
-        with db(central=True) as c:rows=allrows(c,'SELECT * FROM allin_venues WHERE owner_id=%s',(g.user['id'],))
+        with db(central=True) as c:rows=allrows(c,'SELECT * FROM allin_venues WHERE owner_id=%s',(owner_scope(),))
         selected=request.args.get('venue','')
         if selected:rows=[owned(selected)]
         events=[]
@@ -197,7 +201,7 @@ def register(app):
     @app.get('/api/owner/team')
     @authenticated(admin=True)
     def team():
-        with db(central=True) as c:rows=allrows(c,'SELECT * FROM allin_venues WHERE owner_id=%s ORDER BY created_at',(g.user['id'],))
+        with db(central=True) as c:rows=allrows(c,'SELECT * FROM allin_venues WHERE owner_id=%s ORDER BY created_at',(owner_scope(),))
         members=[]
         for venue in rows:
             with venue_context(venue),db() as c:

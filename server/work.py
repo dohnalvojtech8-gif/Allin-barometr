@@ -73,6 +73,7 @@ def merge_scoped_stock(before,submitted,scope):
     return out
 
 def register(app):
+    from server.coowners import owner_scope, valid_owner
     from server.app import (db,one,allrows,execute,uid,digest,password_hash,password_ok,ApiError,body,authenticated,has_permission,effective_permissions,audit,SECURE,cookie_name,WEB,rate_limit,client_ip,write_stock_changes,stock_latest_changes)
     from server.stock import current_quantity,validate_stock,prepare_counts,StockValidationError
 
@@ -88,6 +89,7 @@ def register(app):
     def employee(c,d):
         s=one(c,"SELECT s.*,u.* FROM work_sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=%s AND s.device_hash=%s AND s.last_activity>%s AND u.status='active'",(digest(request.cookies.get(SESSION,'')),d['token_hash'],time.time()-IDLE))
         if not s:return None
+        if s['role']=='admin' and getattr(g,'venue',None) and not valid_owner(s,g.venue):return None
         access=one(c,'SELECT * FROM work_access WHERE user_id=%s AND owner_id=%s',(s['user_id'],d['owner_id']))
         if not access or not access['pin_hash'] or (s.get('stock_owner_id') or s['id'])!=d['owner_id']:return None
         return s
@@ -141,6 +143,7 @@ def register(app):
         with db() as c:
             target=one(c,'SELECT * FROM users WHERE id=%s',(id,))
             if not target:raise ApiError('Účet neexistuje.',404)
+            if request.method=='PUT' and target['role']=='admin' and target['id']!=g.user['id']:raise ApiError('Každý majitel si nastavuje vlastní pracovní PIN.',403)
             owner=target.get('stock_owner_id') or target['id'];data,_=document(c,owner)
             current=one(c,'SELECT * FROM work_access WHERE user_id=%s',(id,))
             if request.method=='GET':return jsonify(hasPin=bool(current and current['owner_id']==owner and current['pin_hash']),stores=data['stores'],allowedStores=store_scope(c,target),ownerId=owner)
@@ -165,10 +168,10 @@ def register(app):
     def pair():
         token=secrets.token_urlsafe(32);csrf=secrets.token_urlsafe(24)
         with db() as c:
-            access=one(c,'SELECT pin_hash FROM work_access WHERE user_id=%s AND owner_id=%s',(g.user['id'],g.user['id']))
+            access=one(c,'SELECT pin_hash FROM work_access WHERE user_id=%s AND owner_id=%s',(g.user['id'],owner_scope()))
             if not access or not access['pin_hash']:raise ApiError('Nejdříve si nastavte vlastní pracovní PIN v profilu nebo nastavení.',403)
             execute(c,'DELETE FROM work_devices WHERE token_hash=%s',(digest(request.cookies.get(DEVICE,'')),))
-            execute(c,'INSERT INTO work_devices (token_hash,owner_id,csrf,created_at) VALUES (%s,%s,%s,%s)',(digest(token),g.user['id'],csrf,time.time()))
+            execute(c,'INSERT INTO work_devices (token_hash,owner_id,csrf,created_at) VALUES (%s,%s,%s,%s)',(digest(token),owner_scope(),csrf,time.time()))
             execute(c,'DELETE FROM sessions WHERE token_hash=%s',(g.user['token_hash'],))
             audit(c,g.user['id'],'work_device_paired','Aktivace pracovního terminálu')
         r=jsonify(ok=True);r.set_cookie(DEVICE,token,max_age=180*86400,secure=SECURE,httponly=True,samesite='Strict',path=request.script_root or '/');r.delete_cookie(cookie_name(),path=request.script_root or '/');r.delete_cookie(SESSION,path=request.script_root or '/');return r
@@ -190,7 +193,7 @@ def register(app):
             pin=body().get('pin','')
             if not isinstance(pin,str) or not re.fullmatch(r'[0-9]{4}',pin):raise ApiError('Nesprávný PIN.',401)
             candidates=allrows(c,"SELECT u.*,w.pin_hash FROM work_access w JOIN users u ON u.id=w.user_id WHERE w.owner_id=%s AND w.pin_hash IS NOT NULL AND u.status='active'",(d['owner_id'],))
-            u=next((u for u in candidates if (u.get('stock_owner_id') or u['id'])==d['owner_id'] and password_ok(pin,u['pin_hash'])),None)
+            u=next((u for u in candidates if (u.get('stock_owner_id') or u['id'])==d['owner_id'] and (u['role']!='admin' or not getattr(g,'venue',None) or valid_owner(u,g.venue)) and password_ok(pin,u['pin_hash'])),None)
             if not u:raise ApiError('Nesprávný PIN.',401)
             if not has_permission(u,'stock.view'):raise ApiError('Nemáte povolený přístup ke skladům. Obraťte se na majitele.',403)
             token=secrets.token_urlsafe(32);csrf=secrets.token_urlsafe(24)

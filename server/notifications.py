@@ -93,16 +93,19 @@ def dispatch(app,venue):
             with db(central=True) as c:
                 keys=one(c,"SELECT * FROM notification_keys WHERE id='vapid'")
                 owner=one(c,"SELECT id FROM users WHERE id=%s AND status='active'",(venue['owner_id'],))
-                subscriptions=allrows(c,'SELECT s.*,p.preferences_json FROM notification_subscriptions s JOIN notification_profiles p ON p.user_id=s.user_id AND p.scope=s.scope WHERE s.scope=%s OR (s.scope=%s AND s.user_id=%s)',(venue['id'],'owner',venue['owner_id']))
+                owners={u['id'] for u in allrows(c,"SELECT id FROM users WHERE role='admin' AND status='active' AND (id=%s OR stock_owner_id=%s)",(venue['owner_id'],venue['owner_id']))} if owner else set()
+                subscriptions=allrows(c,'SELECT s.*,p.preferences_json FROM notification_subscriptions s JOIN notification_profiles p ON p.user_id=s.user_id AND p.scope=s.scope WHERE s.scope=%s OR s.scope=%s',(venue['id'],'owner'))
             if not keys:return
             for event in pending:
                 payload=json.loads(event['payload_json']);required=payload.pop('requiredPermission',None);stores=set(payload.pop('stores',[]));payload['tag']='noira-'+event['id']
                 sent=set();failed=False
                 for row in subscriptions:
                     if row['scope']=='owner':
-                        if not owner:continue
+                        if row['user_id'] not in owners:continue
                     else:
                         if row['user_id'] not in access:continue
+                        local_user=next(u for u in users if u['id']==row['user_id'])
+                        if local_user['role']=='admin' and row['user_id'] not in owners:continue
                         if required and not any(u['id']==row['user_id'] and has_permission(u,required) for u in users):continue
                         scope=access[row['user_id']]
                         if scope is not None and not stores.issubset(scope):continue

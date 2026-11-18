@@ -6,6 +6,27 @@ window.NoiraI18n=(()=>{
  const dictionary=new Map(),lowercase=new Map(),textSources=new WeakMap(),attributeSources=new WeakMap();
  function add(source,en,de){dictionary.set(source,[source,en,de]);lowercase.set(source.toLocaleLowerCase('cs'),[source,en,de])}
  const copy=`
+Majitelé a spolumajitelé|Owners and co-owners|Inhaber und Mitinhaber
+Společný přístup ke všem stávajícím i budoucím provozům. Každý má vlastní přihlášení a dohledatelné změny.|Shared access to all current and future venues. Everyone has their own login and attributable changes.|Gemeinsamer Zugriff auf alle bestehenden und künftigen Betriebe. Jeder hat eigene Zugangsdaten und nachvollziehbare Änderungen.
+Spolumajitelé spravují společné provozy. Zaměstnancům nastavíte přístup pro konkrétní provoz.|Co-owners manage shared venues. Employees receive access to a specific venue.|Mitinhaber verwalten gemeinsame Betriebe. Mitarbeiter erhalten Zugriff auf einen bestimmten Betrieb.
+＋ Přidat spolumajitele|＋ Add co-owner|＋ Mitinhaber hinzufügen
+Přidat spolumajitele|Add co-owner|Mitinhaber hinzufügen
+Hlavní majitel|Primary owner|Hauptinhaber
+Spolumajitel|Co-owner|Mitinhaber
+Vy|You|Sie
+Všechny společné provozy|All shared venues|Alle gemeinsamen Betriebe
+Pozastavit přístup|Suspend access|Zugriff sperren
+Obnovit přístup|Restore access|Zugriff wiederherstellen
+Pozastavit přístup spolumajitele?|Suspend co-owner access?|Zugriff des Mitinhabers sperren?
+Obnovit přístup spolumajitele?|Restore co-owner access?|Zugriff des Mitinhabers wiederherstellen?
+Získá plný přístup ke všem vašim provozům, skladům, inventurám i správě zaměstnanců. Může vytvářet další spolumajitele.|They will have full access to all your venues, stock, inventories and employee management. They can create further co-owners.|Die Person erhält vollen Zugriff auf alle Ihre Betriebe, Lager, Inventuren und die Mitarbeiterverwaltung. Sie kann weitere Mitinhaber anlegen.
+Počáteční heslo|Initial password|Erstes Passwort
+Telefon (volitelné)|Phone (optional)|Telefon (optional)
+E-mail (volitelné)|Email (optional)|E-Mail (optional)
+Přihlašovací údaje předejte osobně. Spolumajitel si může změnit vlastní heslo v nastavení účtu.|Share the login details in person. The co-owner can change their own password in account settings.|Übergeben Sie die Zugangsdaten persönlich. Der Mitinhaber kann sein Passwort in den Kontoeinstellungen ändern.
+Vytvořit účet spolumajitele|Create co-owner account|Mitinhaberkonto erstellen
+Ztratí přístup ke všem společným provozům i pracovnímu terminálu. Historie jeho změn zůstane zachována.|They will lose access to all shared venues and the work terminal. Their change history will be preserved.|Die Person verliert den Zugriff auf alle gemeinsamen Betriebe und das Arbeitsterminal. Ihr Änderungsverlauf bleibt erhalten.
+Účet se bude moci znovu přihlásit ke společným provozům.|The account will be able to sign in to shared venues again.|Das Konto kann sich wieder bei den gemeinsamen Betrieben anmelden.
 ← Zpět do panelu majitele|← Back to owner panel|← Zurück zum Inhaberbereich
 Zpět do panelu majitele|Back to owner panel|Zurück zum Inhaberbereich
 ← Majitel|← Owner|← Inhaber
