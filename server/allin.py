@@ -68,7 +68,7 @@ def register(app):
     from server.app import (authenticated,db,execute,one,allrows,ApiError,body,textfield,uid,
         init_db,seed_shop,public_user,password_hash,session_response,WEB,TEST_DB,COOKIE,SECURE,audit)
     from server.permissions import PERMISSIONS
-    from server.stock import current_quantity
+    from server.stock import current_quantity,at_minimum,low_stock
 
     def owned(venue_id):
         with db(central=True) as c:venue=one(c,'SELECT * FROM allin_venues WHERE id=%s AND owner_id=%s',(venue_id,g.user['id']))
@@ -93,7 +93,7 @@ def register(app):
                     qty=current_quantity(data,product['id'],store['id'])
                     if qty is None:unmeasured+=1;continue
                     known+=1;unit=product['unit'];quantities[unit]=quantities.get(unit,0)+qty
-                    if qty<product.get('min',0):low+=1
+                    if at_minimum(product,qty):low+=1
             inventory_ids={r.get('inventoryId') or r['store']+'|'+r['at'] for r in data['counts']}
             inventory_ids.update(r['id'] for r in data.get('barInventories',[]))
             runs={r['id']:{'at':r['at'],'items':r['items']} for r in data.get('barInventories',[])}
@@ -115,7 +115,7 @@ def register(app):
             last=one(c,'SELECT created_at FROM events ORDER BY created_at DESC LIMIT 1')
             team=one(c,"SELECT COUNT(*) AS n FROM users WHERE role='user'")['n']
             return {**venue,'quantities':{unit:round(qty,3) for unit,qty in quantities.items()},'warehouses':len(stores),'products':len(data['products']),
-                'inventories':len(inventory_ids),'belowMinimum':low,'measuredPositions':known,'unmeasuredPositions':unmeasured,
+                'inventories':len(inventory_ids),'belowMinimum':low,'lowStock':low_stock(data),'measuredPositions':known,'unmeasuredPositions':unmeasured,
                 'latestShortage':shortage,'latestInventoryAt':latest['at'] if latest else None,'employees':team,'lastActivity':last['created_at'] if last else None}
 
     @app.get('/api/owner/venues')

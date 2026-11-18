@@ -40,6 +40,8 @@ def validate_stock(data):
         if not text(p.get('referenceId',''),100,True):raise StockValidationError('Neplatný odkaz na zdroj produktu.')
         if not text(p.get('tapName',''),150,True):raise StockValidationError('Neplatný název volby sládků.')
         if p.get('kind') not in ('piece','keg','wine','liquid','weight') or p.get('unit') not in ('ks','l','kg','balení'):raise StockValidationError('Neplatná jednotka nebo typ produktu.')
+        if p.get('min') is None:p['min']=0;p['minEnabled']=False
+        if 'minEnabled' in p and type(p['minEnabled']) is not bool:raise StockValidationError('Neplatné nastavení minimální zásoby.')
         if not all(number(p.get(k)) for k in ('cost','min','tare','capacity')) or not number(p.get('density'),True):raise StockValidationError('Neplatné množství nebo cena produktu.')
         if p['kind'] in ('keg','wine','liquid') and (p['unit']!='l' or p['capacity']<=0):raise StockValidationError('Sudy a víno vyžadují jednotku l a kladný objem.')
         if not text(p.get('supplier',''),150,True) or not text(p.get('barcode',''),100,True):raise StockValidationError('Neplatný dodavatel nebo čárový kód.')
@@ -49,6 +51,8 @@ def validate_stock(data):
             seen.add(row['id'])
             if row.get('inventoryId') is not None and not text(row['inventoryId'],100):raise StockValidationError('Neplatné ID inventury.')
             if row.get('kind','warehouse') not in ('warehouse','bar'):raise StockValidationError('Neplatný typ inventury.')
+            for key in ('note',):
+                if key in row and not text(row[key],500,True):raise StockValidationError('Neplatný důvod odpisu.')
             for key in ('reference','supplier'):
                 if key in row and not text(row[key],150,True):raise StockValidationError('Neplatný údaj dodávky.')
             q=row.get('qty')
@@ -108,7 +112,7 @@ def required_permissions(before,after):
     if set(old_counts)-set(new_counts) or any(new_counts[k]!=v for k,v in old_counts.items() if k in new_counts):result.add('inventory.adjust')
     old_moves={r['id']:r for r in before.get('moves',[])}
     for r in after['moves']:
-        if old_moves.get(r['id'])!=r:result.add('stock.receive' if r['id'] not in old_moves and r['reason'] in ('Příjem','Vratka') and r['qty']>0 else 'stock.move')
+        if old_moves.get(r['id'])!=r:result.add('stock.writeoff' if r['reason']=='Odpis' else 'stock.receive' if r['id'] not in old_moves and r['reason'] in ('Příjem','Vratka') and r['qty']>0 else 'stock.move')
     if set(old_moves)-{r['id'] for r in after['moves']}:result.add('stock.move')
     old_bars={r['id']:r for r in before.get('barInventories',[])};new_bars={r['id']:r for r in after.get('barInventories',[])}
     new_moves={r['id']:r for r in after['moves']}
@@ -156,6 +160,11 @@ def validate_active_changes(before,after):
         raise StockValidationError('Nejprve dokončete nebo zrušte rozpracovanou inventuru skladu.')
     if any(i.get('store') in archived for i in (after.get('barDraft') or {}).get('items',[])):
         raise StockValidationError('Nejprve uložte rozpracovanou inventuru baru s položkami tohoto skladu.')
+    old_moves={r['id'] for r in before.get('moves',[])}
+    for row in after.get('moves',[]):
+        if row['id'] not in old_moves and row['reason']=='Odpis':
+            if row['qty']>=0 or not isinstance(row.get('note'),str) or not 5<=len(row['note'].strip())<=500:
+                raise StockValidationError('U odpisu zadejte záporný pohyb a důvod (5–500 znaků).')
     for collection in ('products','counts','moves'):
         old={r['id']:r for r in before.get(collection,[])}
         for row in after[collection]:
@@ -179,3 +188,22 @@ def attribute_records(before,after,actor):
                 row.update(fields)
                 if actor['role']!='admin':row['at']=now.isoformat()
     return after
+
+
+def minimum_enabled(product):
+    return product.get('minEnabled',product.get('min',0)>0) is True
+
+
+def at_minimum(product,quantity):
+    return quantity is not None and minimum_enabled(product) and quantity<=product.get('min',0)
+
+
+def low_stock(document):
+    from server.work import local_products
+    rows=[]
+    for store in document.get('stores',[]):
+        if store.get('archivedAt'):continue
+        for product in local_products(document,store['id']):
+            quantity=current_quantity(document,product['id'],store['id'])
+            if at_minimum(product,quantity):rows.append({'productId':product['id'],'productName':product['name'],'storeId':store['id'],'storeName':store['name'],'quantity':quantity,'minimum':product.get('min',0),'unit':product['unit']})
+    return rows

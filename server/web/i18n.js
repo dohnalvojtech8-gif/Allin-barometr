@@ -6,6 +6,32 @@ window.NoiraI18n=(()=>{
  const dictionary=new Map(),lowercase=new Map(),textSources=new WeakMap(),attributeSources=new WeakMap();
  function add(source,en,de){dictionary.set(source,[source,en,de]);lowercase.set(source.toLocaleLowerCase('cs'),[source,en,de])}
  const copy=`
+Nutné doplnit skladové zásoby!|Stock replenishment required!|Lagerbestände müssen aufgefüllt werden!
+Tyto produkty dosáhly nastaveného minima nebo klesly pod něj.|These products reached or fell below the configured minimum.|Diese Produkte haben den Mindestbestand erreicht oder unterschritten.
+Minimální zásoba (volitelné)|Minimum stock (optional)|Mindestbestand (optional)
+Bez upozornění|No alert|Keine Warnung
+Otevírací doba a upozornění|Opening hours and alerts|Öffnungszeiten und Hinweise
+Odepisovat zboží|Write off stock|Waren abschreiben
+Vydávat a přesouvat zboží|Issue and transfer stock|Waren ausgeben und umlagern
+Odpis zboží|Stock write-off|Warenabschreibung
+Zapsat odpis|Save write-off|Abschreibung speichern
+Neobvyklé pohyby a inventury|Unusual movements and inventories|Ungewöhnliche Bewegungen und Inventuren
+K prověření|Needs review|Zu prüfen
+Vysvětlené|Explained|Erklärt
+Označit jako vysvětlené|Mark as explained|Als erklärt markieren
+Znovu otevřít|Reopen|Erneut öffnen
+Používat otevírací dobu|Use opening hours|Öffnungszeiten verwenden
+Otevřít produkt|Open product|Produkt öffnen
+Uložit nastavení provozu|Save venue settings|Betriebseinstellungen speichern
+Limity upozornění|Alert thresholds|Warnschwellen
+Pondělí|Monday|Montag
+Úterý|Tuesday|Dienstag
+Středa|Wednesday|Mittwoch
+Čtvrtek|Thursday|Donnerstag
+Pátek|Friday|Freitag
+Sobota|Saturday|Samstag
+Neděle|Sunday|Sonntag
+Zavřeno|Closed|Geschlossen
 Přidat telefon zaměstnance|Add employee phone|Mitarbeitertelefon hinzufügen
 Přidat e-mail zaměstnance|Add employee email|Mitarbeiter-E-Mail hinzufügen
 Změny byly uloženy.|Changes saved.|Änderungen gespeichert.

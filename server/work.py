@@ -232,14 +232,16 @@ def register(app):
             for s in visible['stores']:
                 if s.get('archivedAt'):continue
                 for p in local_products(data,s['id']):
-                    qty=current_quantity(data,p['id'],s['id']);rows.append({'id':p['id'],'store':s['id'],'name':p['name'],'unit':p['unit'],'qty':qty,'min':p['min']})
+                    qty=current_quantity(data,p['id'],s['id']);rows.append({'id':p['id'],'store':s['id'],'name':p['name'],'unit':p['unit'],'qty':qty,'min':p['min'],'minEnabled':p.get('minEnabled',p.get('min',0)>0)})
         return jsonify(revision=revision,stores=[s for s in visible['stores'] if not s.get('archivedAt')],products=rows)
 
     @app.post('/api/work/move')
     @worker('stock.view')
     def move():
-        v=body();reason=v.get('reason');permission={'Příjem':'stock.receive','Výdej':'stock.move'}.get(reason)
+        v=body();reason=v.get('reason');permission={'Příjem':'stock.receive','Výdej':'stock.move','Odpis':'stock.writeoff'}.get(reason)
         if not permission or not has_permission(g.user,permission):raise ApiError('K této akci nemáte oprávnění.',403)
+        note=v.get('note','')
+        if reason=='Odpis' and (not isinstance(note,str) or not 5<=len(note.strip())<=500 or any(ord(c)<32 for c in note)):raise ApiError('Uveďte důvod odpisu (5–500 znaků).')
         qty=v.get('qty');operation=v.get('operationId')
         if type(qty) not in (int,float) or not math.isfinite(qty) or not 0<qty<=1e12 or not isinstance(operation,str) or not re.fullmatch(r'[a-zA-Z0-9-]{10,100}',operation):raise ApiError('Zadejte kladné množství.')
         with db() as c:
@@ -249,12 +251,12 @@ def register(app):
             signed=qty if reason=='Příjem' else -qty
             duplicate=next((m for m in data['moves'] if m['id']==operation),None)
             if duplicate:
-                if any(duplicate[k]!=val for k,val in [('store',v['store']),('product',p['id']),('qty',signed),('reason',reason)]):raise ApiError('ID zápisu již bylo použito.',409)
+                if any(duplicate[k]!=val for k,val in [('store',v['store']),('product',p['id']),('qty',signed),('reason',reason)]) or (reason=='Odpis' and duplicate.get('note','')!=note.strip()):raise ApiError('ID zápisu již bylo použito.',409)
                 return jsonify(ok=True,duplicate=True)
             if type(v.get('revision')) is not int or revision!=v['revision']:raise ApiError('Stav skladu se změnil. Načtěte jej a zápis zopakujte.',409)
             current=current_quantity(data,p['id'],v['store'])
-            if reason=='Výdej' and (current is None or qty>current):raise ApiError('Ve skladu není dostatečné množství.')
-            new=copy.deepcopy(data);new['moves'].append({'id':operation,'product':p['id'],'store':v['store'],'qty':signed,'reason':reason,'at':datetime.now(timezone.utc).isoformat()})
+            if reason in ('Výdej','Odpis') and (current is None or qty>current):raise ApiError('Ve skladu není dostatečné množství.')
+            new=copy.deepcopy(data);new['moves'].append({'id':operation,'product':p['id'],'store':v['store'],'qty':signed,'reason':reason,'note':note.strip() if reason=='Odpis' else '','at':datetime.now(timezone.utc).isoformat()})
             save(c,data,new,revision);audit(c,g.user['id'],'work_move',reason+' · '+p['name'])
         return jsonify(ok=True)
 

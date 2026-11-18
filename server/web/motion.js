@@ -1,9 +1,9 @@
 'use strict';
 /* Selected NOIRA motion: buttons 8, pages 1, menu 2, cards 5,
-   dialogs 7, loading 4, confirmation 8, forms 10. */
+   dialogs 7, confirmation 8, forms 10; loading percentages removed. */
 window.NoiraMotion=(()=>{
  const reduced=matchMedia('(prefers-reduced-motion: reduce)'),running=new WeakMap(),submissions=new WeakMap();
- let lastSubmission=null,progress=null,showTimer=0,hideTimer=0,total=0,completed=0,failed=false,selectedVenue='';
+ let lastSubmission=null,selectedVenue='';
  const t=value=>window.NoiraI18n?.t(value)||value;
  function animate(node,frames,duration=240){
   if(!node?.isConnected||reduced.matches||!node.animate)return;
@@ -12,18 +12,6 @@ window.NoiraMotion=(()=>{
   running.set(node,animation);animation.finished.then(()=>{if(running.get(node)===animation)running.delete(node)},()=>{});
  }
  function announce(message){let node=document.getElementById('motion-status');if(!node){node=document.createElement('div');node.id='motion-status';node.className='motion-sr-only';node.setAttribute('role','status');document.body.append(node)}node.textContent=t(message)}
- function ensureProgress(){
-  if(progress)return progress;
-  progress=document.createElement('div');progress.id='motion-progress';progress.hidden=true;
-  progress.innerHTML='<div class="motion-progress-heading"><span data-progress-label></span><span data-progress-value translate="no">0 %</span></div><div class="motion-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div class="motion-progress-fill"></div></div>';
-  document.body.append(progress);return progress;
- }
- function paintProgress(){const node=ensureProgress(),percent=total?Math.floor(100*completed/total):0;
-  node.querySelector('[data-progress-label]').textContent=t(failed?'Požadavek se nepodařil.':'Načítání');
-  node.querySelector('[data-progress-value]').textContent=percent+' %';
-  const track=node.querySelector('[role=progressbar]');track.setAttribute('aria-label',t('Načítání'));track.setAttribute('aria-valuenow',String(percent));
-  node.querySelector('.motion-progress-fill').style.width=percent+'%';node.classList.toggle('motion-progress-error',failed);
- }
  function beginSubmission(event){
   const form=event.target;if(!(form instanceof HTMLFormElement))return;
   const existing=submissions.get(form);
@@ -45,9 +33,6 @@ window.NoiraMotion=(()=>{
  }
  function request(path,method='GET'){
   if(/\/api\/(activity|work\/touch)(?:[/?]|$)/.test(path))return ()=>{};
-  clearTimeout(hideTimer);if(completed===total){total=0;completed=0;failed=false}
-  total++;paintProgress();
-  if(!showTimer)showTimer=setTimeout(()=>{showTimer=0;if(completed<total)ensureProgress().hidden=false},140);
   const writing=!['GET','HEAD'].includes(method.toUpperCase());
   const state=writing&&lastSubmission?.form.isConnected&&(lastSubmission.pending||performance.now()-lastSubmission.started<1200)?lastSubmission:null;
   if(state){state.pending++;state.finished=false;if(state.button){
@@ -57,9 +42,8 @@ window.NoiraMotion=(()=>{
    }
   }}
   let done=false;
-  return ok=>{if(done)return;done=true;completed++;failed ||= !ok;paintProgress();
+  return ok=>{if(done)return;done=true;
    if(state){state.failed ||= !ok;state.pending--;setTimeout(()=>finishSubmission(state),0)}
-   if(completed===total){clearTimeout(showTimer);showTimer=0;hideTimer=setTimeout(()=>{if(completed===total)ensureProgress().hidden=true},failed?500:220)}
   };
  }
  function swap(node,html){if(!node)return;node.innerHTML=html;animate(node,[{opacity:0},{opacity:1}],200)}

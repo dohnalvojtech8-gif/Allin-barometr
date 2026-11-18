@@ -790,6 +790,8 @@ from server.reviews import register as register_reviews
 register_reviews(app)
 from server.operations import register as register_operations
 register_operations(app)
+from server.controls import register as register_controls
+register_controls(app)
 
 @app.get('/noira.css')
 def noira_theme():return send_from_directory(WEB,'noira.css')

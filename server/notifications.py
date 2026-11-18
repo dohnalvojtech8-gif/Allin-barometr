@@ -60,14 +60,15 @@ def record_changes(c,before,after):
     old_products={p['id']:p for p in before.get('products',[])}
     low=[];low_stores=set()
     from server.work import local_products
+    from server.stock import at_minimum
     for store in after['stores']:
         if store.get('archivedAt'):continue
         for product in local_products(after,store['id']):
             qty=current_quantity(after,product['id'],store['id'])
             previous=current_quantity(before,product['id'],store['id']) if product['id'] in old_products else None
-            if qty is not None and qty<product.get('min',0) and (previous is None or previous>=old_products.get(product['id'],{}).get('min',0)):
+            if at_minimum(product,qty) and not at_minimum(old_products.get(product['id'],{}),previous):
                 low.append(product['name']);low_stores.add(store['id'])
-    if low:add('low_stock',venue['name']+' · nízká zásoba',str(len(low))+' položek je pod nastaveným minimem.',low_stores)
+    if low:add('low_stock',venue['name']+' · nízká zásoba',str(len(low))+' položek dosáhlo nastaveného minima nebo kleslo pod něj.',low_stores)
 
 
 def deliver(subscription,payload,private_key):
