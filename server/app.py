@@ -725,7 +725,7 @@ def stock_script():return send_from_directory(WEB,'stock.js')
 def health():
     with db() as c:execute(c,'SELECT 1')
     from server.vision import configuration
-    return jsonify(status='ok',version='1.4.0',application='NOIRA',database='supabase' if SUPABASE_DATABASE_URL else 'postgres',freeUnlocks=FREE_UNLOCKS,automaticLevelEnabled=configuration()['enabled'],shopBundleTemplates=len(SHOP_TEMPLATES))
+    return jsonify(status='ok',version='1.8.0',application='NOIRA',database='supabase' if SUPABASE_DATABASE_URL else 'postgres',freeUnlocks=FREE_UNLOCKS,automaticLevelEnabled=configuration()['enabled'],shopBundleTemplates=len(SHOP_TEMPLATES))
 @app.get('/')
 def index():return send_from_directory(WEB,'index.html' if getattr(g,'venue',None) else 'owner.html')
 @app.get('/designs.js')
@@ -791,6 +791,8 @@ def premium_theme():
 
 from server.allin import register as register_allin
 register_allin(app)
+from server.venue_settings import register as register_venue_settings
+register_venue_settings(app)
 from server.coowners import register as register_coowners
 register_coowners(app)
 from server.notifications import register as register_notifications
@@ -821,6 +823,12 @@ def motion_script():return send_from_directory(WEB,'motion.js')
 @app.get('/motion.css')
 def motion_styles():return send_from_directory(WEB,'motion.css')
 
+
+@app.get('/venue-cards.css')
+def venue_cards_styles():return send_from_directory(WEB,'venue-cards.css')
+
+@app.get('/venue-cards.js')
+def venue_cards_script():return send_from_directory(WEB,'venue-cards.js')
 
 @app.get('/team.js')
 def team_script():return send_from_directory(WEB,'team.js')

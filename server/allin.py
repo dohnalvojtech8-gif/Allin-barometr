@@ -42,6 +42,8 @@ def install_context(app):
         columns={r['name'] for r in allrows(c,'PRAGMA table_info(allin_venues)')} if TEST_DB else {r['column_name'] for r in allrows(c,"SELECT column_name FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='allin_venues'")}
         for field in ('manager_first_name','manager_last_name'):
             if field not in columns:execute(c,"ALTER TABLE allin_venues ADD COLUMN "+field+" TEXT NOT NULL DEFAULT ''")
+        for field,sql in [('archived_at','DOUBLE PRECISION'),('card_style_json',"TEXT NOT NULL DEFAULT '{}'")]:
+            if field not in columns:execute(c,'ALTER TABLE allin_venues ADD COLUMN '+field+' '+sql)
         execute(c,'CREATE INDEX IF NOT EXISTS allin_venues_owner ON allin_venues(owner_id,created_at)')
         if not TEST_DB:
             execute(c,'ALTER TABLE allin_venues ENABLE ROW LEVEL SECURITY')
@@ -56,6 +58,11 @@ def install_context(app):
         if venue_id:
             with db(central=True) as c:venue=one(c,'SELECT * FROM allin_venues WHERE id=%s',(venue_id,))
             if not venue:raise ApiError('Provoz neexistuje.',404)
+            if venue.get('archived_at') is not None:
+                if not request.path.startswith('/api/'):
+                    from server.app import WEB
+                    return send_from_directory(WEB,'archived.html'),410
+                raise ApiError('Tento provoz je vypnutý a archivovaný. Obraťte se na majitele.',410)
             g.venue=venue
             if request.path.startswith('/api/owner/') or request.path=='/api/owner':raise ApiError('Centrální panel otevřete mimo provoz.',403)
         elif request.path.startswith('/api/') and not (TEST_DB and os.environ.get('ALLIN_LEGACY_TEST_API')=='1'):
@@ -77,6 +84,7 @@ def register(app):
     def owned(venue_id):
         with db(central=True) as c:venue=one(c,'SELECT * FROM allin_venues WHERE id=%s AND owner_id=%s',(venue_id,owner_scope()))
         if not venue:raise ApiError('Provoz neexistuje nebo k němu nemáte přístup.',404)
+        if venue.get('archived_at') is not None:raise ApiError('Provoz je archivovaný. Nejprve jej obnovte.',409)
         return venue
 
     def manager_values(values):
@@ -118,14 +126,14 @@ def register(app):
                     shortage={unit:round(qty,3) for unit,qty in shortage.items()}
             last=one(c,'SELECT created_at FROM events ORDER BY created_at DESC LIMIT 1')
             team=one(c,"SELECT COUNT(*) AS n FROM users WHERE role='user'")['n']
-            return {**venue,'quantities':{unit:round(qty,3) for unit,qty in quantities.items()},'warehouses':len(stores),'products':len(data['products']),
+            return {**venue,'cardStyle':json.loads(venue.get('card_style_json') or '{}'),'quantities':{unit:round(qty,3) for unit,qty in quantities.items()},'warehouses':len(stores),'products':len(data['products']),
                 'inventories':len(inventory_ids),'belowMinimum':low,'lowStock':low_stock(data),'measuredPositions':known,'unmeasuredPositions':unmeasured,
                 'latestShortage':shortage,'latestInventoryAt':latest['at'] if latest else None,'employees':team,'lastActivity':last['created_at'] if last else None}
 
     @app.get('/api/owner/venues')
     @authenticated(admin=True)
     def venues():
-        with db(central=True) as c:rows=allrows(c,'SELECT * FROM allin_venues WHERE owner_id=%s ORDER BY created_at,id',(owner_scope(),))
+        with db(central=True) as c:rows=allrows(c,'SELECT * FROM allin_venues WHERE owner_id=%s AND archived_at IS '+('NOT NULL' if request.args.get('archived')=='1' else 'NULL')+' ORDER BY created_at,id',(owner_scope(),))
         return jsonify(venues=[summary(v) for v in rows])
 
     @app.post('/api/owner/venues')
@@ -188,7 +196,7 @@ def register(app):
     @app.get('/api/owner/activity')
     @authenticated(admin=True)
     def owner_activity():
-        with db(central=True) as c:rows=allrows(c,'SELECT * FROM allin_venues WHERE owner_id=%s',(owner_scope(),))
+        with db(central=True) as c:rows=allrows(c,'SELECT * FROM allin_venues WHERE owner_id=%s AND archived_at IS NULL',(owner_scope(),))
         selected=request.args.get('venue','')
         if selected:rows=[owned(selected)]
         events=[]
@@ -201,7 +209,7 @@ def register(app):
     @app.get('/api/owner/team')
     @authenticated(admin=True)
     def team():
-        with db(central=True) as c:rows=allrows(c,'SELECT * FROM allin_venues WHERE owner_id=%s ORDER BY created_at',(owner_scope(),))
+        with db(central=True) as c:rows=allrows(c,'SELECT * FROM allin_venues WHERE owner_id=%s AND archived_at IS NULL ORDER BY created_at',(owner_scope(),))
         members=[]
         for venue in rows:
             with venue_context(venue),db() as c:

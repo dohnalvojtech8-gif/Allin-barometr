@@ -92,9 +92,10 @@ def register(app):
     def own(c,venue_id):
         row=one(c,'SELECT * FROM allin_venues WHERE id=%s AND owner_id=%s',(venue_id,owner_scope()))
         if not row:raise ApiError('Provoz neexistuje nebo k němu nemáte přístup.',404)
+        if row.get('archived_at') is not None:raise ApiError('Provoz je archivovaný.',409)
         return row
     def filters():
-        conditions=['v.owner_id=%s'];args=[owner_scope()]
+        conditions=['v.owner_id=%s','v.archived_at IS NULL'];args=[owner_scope()]
         venue=request.args.get('venue','')
         if venue:
             with db(central=True) as c:own(c,venue)
@@ -119,7 +120,7 @@ def register(app):
     @authenticated(admin=True)
     def pos_status():
         with db(central=True) as c:
-            venues=allrows(c,'SELECT v.*,p.provider,p.register_label,p.updated_at AS configured_at FROM allin_venues v LEFT JOIN pos_connections p ON p.venue_id=v.id WHERE v.owner_id=%s ORDER BY v.created_at,v.id',(owner_scope(),))
+            venues=allrows(c,'SELECT v.*,p.provider,p.register_label,p.updated_at AS configured_at FROM allin_venues v LEFT JOIN pos_connections p ON p.venue_id=v.id WHERE v.owner_id=%s AND v.archived_at IS NULL ORDER BY v.created_at,v.id',(owner_scope(),))
             for v in venues:
                 v['latestResults']=allrows(c,"SELECT business_date,currency,SUM(revenue_net) AS revenue_net,SUM(CASE WHEN cogs IS NULL OR operating_costs IS NULL THEN 1 ELSE 0 END) AS missing,SUM(CASE WHEN cogs IS NOT NULL AND operating_costs IS NOT NULL THEN revenue_net-cogs-operating_costs ELSE 0 END) AS profit,COUNT(*) AS registers FROM pos_days WHERE venue_id=%s AND business_date=(SELECT MAX(business_date) FROM pos_days WHERE venue_id=%s) GROUP BY business_date,currency ORDER BY currency",(v['id'],v['id']))
                 for day in v['latestResults']:

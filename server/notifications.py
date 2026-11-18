@@ -78,6 +78,7 @@ def deliver(subscription,payload,private_key):
 
 
 def dispatch(app,venue):
+    if venue.get('archived_at') is not None:return
     global RUNNING
     from server.app import db,one,allrows,execute
     from server.work import store_scope
@@ -91,6 +92,7 @@ def dispatch(app,venue):
                 access={u['id']:store_scope(c,u) for u in users if has_permission(u,'stock.view')}
             if not pending:return
             with db(central=True) as c:
+                if not one(c,'SELECT id FROM allin_venues WHERE id=%s AND archived_at IS NULL',(venue['id'],)):return
                 keys=one(c,"SELECT * FROM notification_keys WHERE id='vapid'")
                 owner=one(c,"SELECT id FROM users WHERE id=%s AND status='active'",(venue['owner_id'],))
                 owners={u['id'] for u in allrows(c,"SELECT id FROM users WHERE role='admin' AND status='active' AND (id=%s OR stock_owner_id=%s)",(venue['owner_id'],venue['owner_id']))} if owner else set()

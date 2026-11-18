@@ -140,3 +140,13 @@ V panelu majitele → Uživatelé a přístupy → Přidat spolumajitele lze vyt
 V centrální tabulce users označuje stock_owner_id u dalších adminů hlavního majitele; nezávislé účty s NULL zůstávají oddělené. Provozy a skladové dokumenty patří hlavnímu majiteli, lokální kopie účtů mají náhodná hesla a nepřebírají centrální přihlašovací heslo. Hlavní majitel může pozastavit nebo obnovit přístup spolumajitele. Pozastavení ruší jeho centrální i provozní relace a přihlášení do terminálu; členství se navíc kontroluje centrálně při každém požadavku i přihlášení PINem. Každý spolumajitel může přidat dalšího spolumajitele do stejné skupiny, ale nemůže blokovat hlavního majitele.
 
 Ověření: `python -m pytest -q tests/test_coowners.py` a `node tests/coowners-browser.cjs` proti izolovanému lokálnímu serveru.
+
+### Karty provozů, archiv a vymazání
+Na kartě provozu je vpravo nahoře nabídka se třemi čárkami: Přidat/Změnit manažera, Spravovat otevírací dobu, Upravit kartu, Vypnout a archivovat provoz, Vymazat provoz. Vstup Otevřít provoz zůstává dole a používá obrysovou ikonu dveří. Editor ukládá vzhled ke konkrétnímu provozu a sdílí ho mezi majiteli: 12 stylů, 6 písem, velikosti, tučné písmo/kurzíva, libovolné barvy přes plný výběr a HEX, rohy a stín, živý náhled a výchozí vzhled.
+
+Archivace ukončí relace a pracovní terminály, zabrání dalšímu přihlášení a zachová data. Archiv provozů v menu majitele umožňuje obnovení; je nutné nové přihlášení a opětovná aktivace terminálu. Aktivní přehledy nezahrnují archivované provozy. Vymazání vyžaduje přesný název a odstraní samostatný prostor provozu i související centrální údaje, nikoli účty majitelů ani ostatní provozy. PostgreSQL provede DROP SCHEMA a centrální kaskády v jedné transakci.
+
+### Logika upozornění na odchylky
+Příjmy, vratky, běžné výdeje a jednorázové vrácení přesunu samy nevytvářejí podezření. Doba mimo otevírací hodiny pouze doplňuje kontext významné odchylky. Inventury vycházejí z uloženého očekávaného stavu (předchozí stav a evidované pohyby); bez něj se rozdíl nehlásí. Rozdíl musí přesáhnout toleranci 1 ks / 0,05 l nebo kg včetně a současně dosáhnout procentního nebo množstevního limitu. Opakované manko počítá různé inventury a pouze významné rozdíly. Opakované odpisy stejného produktu a skladu za 7 dní musí dosáhnout i souhrnného množstevního limitu. Zpětné přesuny se hlásí až při opakování během 24 hodin a dosažení množstevního limitu. Opravy se seskupují podle stejné schválené inventury za 30 dní. Každé upozornění uvádí podklady; nejde o důkaz podvodu.
+
+Ověření: `python -m pytest -q`, `node tests/venue-settings-browser.cjs`, `node tests/controls-browser.cjs` proti izolované testovací aplikaci.

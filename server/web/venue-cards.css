@@ -1,0 +1,34 @@
+/* Shared per-venue appearance and compact action menu. */
+.owner-hub .customizable-venue{background:var(--vc-bg,#1d2023);color:var(--vc-text,#f7f0e4);font-family:var(--vc-font,system-ui,sans-serif);border-radius:var(--vc-radius,16px);box-shadow:var(--vc-shadow,none);position:relative;overflow:visible;min-width:0}
+.owner-hub .customizable-venue h3{font-family:var(--vc-font,system-ui,sans-serif);font-size:var(--vc-title,25px);font-weight:var(--vc-weight,400);font-style:var(--vc-slant,normal);color:var(--vc-text);overflow-wrap:anywhere}
+.owner-hub .customizable-venue .venue-card-name{min-width:0;flex:1}
+.owner-hub .customizable-venue .venue-card-top{align-items:center;gap:12px}
+.owner-hub .customizable-venue small,.owner-hub .customizable-venue .venue-metrics span,.owner-hub .customizable-venue .hub-note,.owner-hub .customizable-venue .venue-quantities span{color:var(--vc-muted,#bdb4a4);font-size:var(--vc-small,14px)}
+.owner-hub .customizable-venue .venue-manager strong,.owner-hub .customizable-venue .venue-metrics strong,.owner-hub .customizable-venue .venue-quantities strong{color:var(--vc-text);font-family:var(--vc-font,system-ui,sans-serif)}
+.owner-hub .customizable-venue .venue-monogram{color:var(--vc-accent);background:color-mix(in srgb,var(--vc-accent) 14%,var(--vc-bg));flex-shrink:0}
+.owner-hub .customizable-venue .venue-open-button{display:inline-flex;align-items:center;justify-content:center;gap:9px;min-height:44px;background:transparent;color:var(--vc-accent);border:1px solid var(--vc-accent);font-size:var(--vc-small,14px);white-space:normal}
+.owner-hub .customizable-venue .venue-open-button:hover{background:color-mix(in srgb,var(--vc-accent) 15%,var(--vc-bg))}
+.venue-action-icon{flex:0 0 auto;vertical-align:middle}
+.venue-menu-wrap{position:relative;margin-left:auto;flex:0 0 auto}
+.owner-hub .customizable-venue .venue-menu-toggle{display:grid;place-items:center;min-width:44px;min-height:44px;padding:10px;color:var(--vc-text);background:transparent;border-color:transparent}
+.owner-hub .customizable-venue .venue-menu-toggle:hover,.owner-hub .customizable-venue .venue-menu-toggle[aria-expanded=true]{border-color:var(--vc-accent)}
+.owner-hub .venue-actions-menu{position:absolute;right:0;top:calc(100% + 7px);z-index:20;width:270px;max-width:calc(100vw - 52px);padding:6px;background:#24272a;border:1px solid #57564e;border-radius:12px;box-shadow:0 12px 40px #0007;color:#f7f0e4}
+.owner-hub .venue-actions-menu button{display:flex;align-items:center;justify-content:flex-start;gap:10px;width:100%;padding:10px;min-height:44px;font:14px/1.5 system-ui,sans-serif;background:transparent;border:0;text-align:left;color:#f7f0e4;white-space:normal}
+.owner-hub .venue-actions-menu button:hover{background:#393b3b}.owner-hub .venue-actions-menu .venue-menu-danger{color:#ffb2a9}.venue-actions-menu hr{border:0;border-top:1px solid #454640;margin:5px 7px}
+.customizable-venue:has([aria-expanded=true]){z-index:25}
+.owner-hub .customizable-venue[data-card-style=stripe]{border-left:4px solid var(--vc-accent)}
+.owner-hub .customizable-venue[data-card-style=stripe] .venue-monogram,.owner-hub .customizable-venue[data-card-style=editorial] .venue-monogram{display:none}
+.owner-hub .customizable-venue[data-card-style=banner] .venue-card-top{padding:14px;background:color-mix(in srgb,var(--vc-accent) 15%,var(--vc-bg));border-radius:calc(var(--vc-radius) * .65)}
+.owner-hub .customizable-venue[data-card-style=editorial] .venue-manager{padding-top:10px;border-top:1px solid var(--vc-accent)}
+.owner-hub .customizable-venue[data-card-style=compact]{padding:20px}.owner-hub .customizable-venue[data-card-style=compact] .venue-card-top{margin-bottom:16px}.owner-hub .customizable-venue[data-card-style=compact] .venue-monogram{border-radius:50%}.owner-hub .customizable-venue[data-card-style=compact] .venue-quantities{margin:12px 0}
+.owner-hub .customizable-venue[data-card-style=gradient]{background:linear-gradient(130deg,color-mix(in srgb,var(--vc-accent) 13%,var(--vc-bg)),var(--vc-bg) 75%)}
+.owner-hub .customizable-venue[data-card-style=minimal]{border:0;border-top:2px solid var(--vc-accent);border-radius:0;box-shadow:none}
+.owner-hub .customizable-venue[data-card-style=ledger] .venue-metrics{display:flex;flex-direction:column;gap:0}.owner-hub .customizable-venue[data-card-style=ledger] .venue-metrics>div{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #7774}
+.owner-hub .customizable-venue[data-card-style=columns] .venue-metrics>div+div{border-left:1px solid #7775;padding-left:10px}
+.owner-hub .customizable-venue[data-card-style=outline]{border-color:var(--vc-accent)}.owner-hub .customizable-venue[data-card-style=outline] .venue-monogram{background:transparent;border:1px solid var(--vc-accent)}
+.owner-hub .customizable-venue[data-card-style=square]{border-radius:3px}.owner-hub .customizable-venue[data-card-style=clean] .venue-monogram{background:transparent}.venue-archive-label{color:var(--vc-accent);font-size:14px;margin:0 0 15px}
+.owner-hub .venue-settings-modal{width:min(720px,calc(100vw - 28px));max-width:720px}.venue-card-preview{margin:20px 0}.venue-card-preview .venue-card{max-width:100%;margin:auto}.venue-card-preview .venue-actions-menu{display:none!important}
+.owner-hub .venue-color-inputs{display:grid;grid-template-columns:52px minmax(0,1fr);gap:9px;align-items:center}.owner-hub .venue-color-inputs input[type=color]{width:52px;min-width:0;height:44px;padding:3px;border:1px solid #7778;border-radius:8px}.owner-hub .venue-color-inputs input:not([type=color]){min-width:0}
+.venue-style-toggles{display:flex;flex-wrap:wrap;gap:15px;margin:20px 0}.owner-hub .venue-style-toggles label{display:flex;gap:7px;align-items:center}.owner-hub .venue-style-toggles input{width:auto;margin:0}.venue-editor-actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between}.venue-editor-actions button{min-height:44px}
+@media(max-width:450px){.owner-hub .customizable-venue .venue-card-top{gap:9px}.owner-hub .customizable-venue .venue-monogram{width:38px;height:42px;font-size:24px}.owner-hub .customizable-venue .venue-card-bottom{gap:10px;align-items:flex-end}.owner-hub .customizable-venue .venue-card-bottom>small{flex:1;min-width:0}.owner-hub .customizable-venue .venue-open-button{max-width:155px;flex:0 0 auto;padding:10px}.owner-hub .venue-settings-modal{padding:22px 15px}.owner-hub .venue-card-preview .venue-card{padding:16px}.owner-hub .venue-card-preview .venue-monogram{display:none}.owner-hub .venue-actions-menu{max-width:calc(100vw - 60px)}}
+.owner-hub .customizable-venue .venue-manager strong{font-size:var(--vc-small,14px);overflow-wrap:anywhere}.owner-hub .customizable-venue .venue-metrics strong{font-size:calc(var(--vc-small,14px) * 1.4)}.owner-hub .customizable-venue .venue-quantities strong{font-size:calc(var(--vc-small,14px) * 2)}

@@ -102,6 +102,7 @@ def register(app):
     def owned(c,id):
         venue=one(c,'SELECT * FROM allin_venues WHERE id=%s AND owner_id=%s',(id,owner_scope()))
         if not venue:raise ApiError('Provoz neexistuje nebo k němu nemáte přístup.',404)
+        if venue.get('archived_at') is not None:raise ApiError('Provoz je archivovaný.',409)
         return venue
     def period(values):
         today=datetime.now(PRAGUE).date();first=values.get('from') or (today-timedelta(days=30)).isoformat();last=values.get('to') or today.isoformat()
@@ -129,7 +130,7 @@ def register(app):
         previous_last=(date.fromisoformat(first)-timedelta(days=1)).isoformat();previous_first=(date.fromisoformat(first)-timedelta(days=span)).isoformat()
         with db(central=True) as c:
             if selected:owned(c,selected)
-            venues=allrows(c,'SELECT * FROM allin_venues WHERE owner_id=%s ORDER BY created_at,id',(owner_scope(),))
+            venues=allrows(c,'SELECT * FROM allin_venues WHERE owner_id=%s AND archived_at IS NULL ORDER BY created_at,id',(owner_scope(),))
         results=[]
         for venue in venues:
             if selected and venue['id']!=selected:continue

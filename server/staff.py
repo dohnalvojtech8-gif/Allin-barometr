@@ -75,7 +75,7 @@ def index_employee(c,user):
 def employee_login(values,username,password):
     """Return a venue session only after checking credentials in that venue."""
     from server.app import db,one,allrows,password_ok,ApiError,session_response,app
-    where='d.username_key=%s';args=(username.casefold(),)
+    where='v.archived_at IS NULL AND d.username_key=%s';args=(username.casefold(),)
     if values.get('venueId'):
         if not isinstance(values['venueId'],str):raise ApiError('Neplatný provoz.')
         where+=' AND v.id=%s';args+=(values['venueId'],)
@@ -132,6 +132,7 @@ def register(app):
             with db(central=True) as c:venue=one(c,'SELECT * FROM allin_venues WHERE id=%s AND owner_id=%s',(venue_id,owner_scope()))
             if not venue:raise ApiError('Provoz neexistuje nebo k němu nemáte přístup.',404)
         else:venue=getattr(g,'venue',None)
+        if venue and venue.get('archived_at') is not None:raise ApiError('Provoz je archivovaný.',409)
         with venue_context(venue),db() as c:
             execute(c,'UPDATE users SET last_seen=last_seen WHERE id=%s',(g.user['id'],))
             seed_positions(c)

@@ -6,6 +6,61 @@ window.NoiraI18n=(()=>{
  const dictionary=new Map(),lowercase=new Map(),textSources=new WeakMap(),attributeSources=new WeakMap();
  function add(source,en,de){dictionary.set(source,[source,en,de]);lowercase.set(source.toLocaleLowerCase('cs'),[source,en,de])}
  const copy=`
+Provoz je archivovaný|Venue archived|Betrieb archiviert
+Přístup je vypnutý. Data a historie zůstávají zachovány. Pro obnovení se obraťte na majitele.|Access is disabled. Data and history are preserved. Contact the owner to restore access.|Der Zugriff ist deaktiviert. Daten und Verlauf bleiben erhalten. Wenden Sie sich zur Wiederherstellung an den Inhaber.
+Přejít do panelu majitele|Go to owner panel|Zum Inhaberbereich
+Archiv provozů|Venue archive|Betriebsarchiv
+Archiv je prázdný.|The archive is empty.|Das Archiv ist leer.
+Vypnuté provozy se zachovanými daty a historií.|Disabled venues with their data and history preserved.|Deaktivierte Betriebe mit erhaltenen Daten und Verlauf.
+Nabídka provozu|Venue menu|Betriebsmenü
+Přidat manažera|Add manager|Manager hinzufügen
+Změnit manažera|Change manager|Manager ändern
+Spravovat otevírací dobu|Manage opening hours|Öffnungszeiten verwalten
+Upravit kartu|Customize card|Karte anpassen
+Vypnout a archivovat provoz|Disable and archive venue|Betrieb deaktivieren und archivieren
+Vymazat provoz|Delete venue|Betrieb löschen
+Obnovit provoz|Restore venue|Betrieb wiederherstellen
+Archivovaný provoz · přístup vypnutý|Archived venue · access disabled|Archivierter Betrieb · Zugriff deaktiviert
+Data a historie zachovány|Data and history preserved|Daten und Verlauf erhalten
+Přístup všech účtů i pracovních terminálů se vypne. Sklady, inventury a historie zůstanou zachovány. Provoz můžete později obnovit.|Access for all accounts and work terminals will be disabled. Stock, inventories and history will be preserved. You can restore the venue later.|Der Zugriff aller Konten und Arbeitsterminals wird deaktiviert. Lager, Inventuren und Verlauf bleiben erhalten. Sie können den Betrieb später wiederherstellen.
+Provoz se vrátí mezi aktivní. Uživatelé se budou muset znovu přihlásit a pracovní terminály znovu aktivovat.|The venue will become active again. Users must sign in again and work terminals must be reactivated.|Der Betrieb wird wieder aktiv. Benutzer müssen sich erneut anmelden und Arbeitsterminals müssen erneut aktiviert werden.
+Trvale se odstraní provoz, jeho zaměstnanecké profily, sklady, inventury, snímky, prodejní data a historie. Tento krok nelze vrátit. Účty majitelů a ostatní provozy zůstanou zachovány.|The venue, its employee profiles, stock, inventories, photos, sales data and history will be permanently deleted. This cannot be undone. Owner accounts and other venues will be preserved.|Der Betrieb, seine Mitarbeiterprofile, Lager, Inventuren, Fotos, Verkaufsdaten und der Verlauf werden endgültig gelöscht. Dies kann nicht rückgängig gemacht werden. Inhaberkonten und andere Betriebe bleiben erhalten.
+Pro potvrzení napište přesný název provozu|Enter the exact venue name to confirm|Geben Sie zur Bestätigung den genauen Betriebsnamen ein
+Styl karty|Card style|Kartenstil
+Písmo|Font|Schriftart
+Velikost názvu|Title size|Titelgröße
+Velikost ostatního textu|Body text size|Textgröße
+Barva karty|Card color|Kartenfarbe
+Barva písma|Text color|Textfarbe
+Barva doplňkového textu|Secondary text color|Farbe des Zusatztextes
+Barva zvýraznění|Accent color|Akzentfarbe
+Zaoblení rohů|Corner radius|Eckenradius
+Tučné písmo|Bold text|Fettschrift
+Kurzíva|Italic|Kursiv
+Stín karty|Card shadow|Kartenschatten
+Výchozí vzhled|Default appearance|Standarddarstellung
+Uložit vzhled karty|Save card appearance|Kartendarstellung speichern
+Vyberte libovolnou barvu z barevného spektra nebo zadejte HEX. Změny ihned uvidíte v náhledu.|Choose any color from the spectrum or enter a HEX code. Changes appear immediately in the preview.|Wählen Sie eine beliebige Farbe aus dem Spektrum oder geben Sie einen HEX-Code ein. Änderungen erscheinen sofort in der Vorschau.
+Střídmá elegance|Understated elegance|Schlichte Eleganz
+Čistý přehled|Clean overview|Klare Übersicht
+Boční linka|Side stripe|Seitenlinie
+Barevné záhlaví|Colored header|Farbige Kopfzeile
+Redakční styl|Editorial|Redaktioneller Stil
+Kompaktní|Compact|Kompakt
+Jemný přechod|Subtle gradient|Sanfter Verlauf
+Otevřený prostor|Open space|Offener Raum
+Provozní přehled|Operations overview|Betriebsübersicht
+Tři sloupce|Three columns|Drei Spalten
+Obrys|Outline|Kontur
+Architektonická|Architectural|Architektonisch
+Moderní bezpatkové|Modern sans serif|Moderne serifenlose Schrift
+Elegantní patkové|Elegant serif|Elegante Serifenschrift
+Klasické bezpatkové|Classic sans serif|Klassische serifenlose Schrift
+Výrazně čitelné|Highly readable|Besonders gut lesbar
+Kompaktní čitelné|Compact readable|Kompakt und lesbar
+Technické|Monospace|Nichtproportional
+Zohlednit čas u významných odchylek|Include time context for significant discrepancies|Zeit bei erheblichen Abweichungen berücksichtigen
+Počet opakovaných odchylek|Number of repeated discrepancies|Anzahl wiederholter Abweichungen
 Majitelé a spolumajitelé|Owners and co-owners|Inhaber und Mitinhaber
 Společný přístup ke všem stávajícím i budoucím provozům. Každý má vlastní přihlášení a dohledatelné změny.|Shared access to all current and future venues. Everyone has their own login and attributable changes.|Gemeinsamer Zugriff auf alle bestehenden und künftigen Betriebe. Jeder hat eigene Zugangsdaten und nachvollziehbare Änderungen.
 Spolumajitelé spravují společné provozy. Zaměstnancům nastavíte přístup pro konkrétní provoz.|Co-owners manage shared venues. Employees receive access to a specific venue.|Mitinhaber verwalten gemeinsame Betriebe. Mitarbeiter erhalten Zugriff auf einen bestimmten Betrieb.

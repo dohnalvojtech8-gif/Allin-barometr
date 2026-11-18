@@ -67,34 +67,46 @@ def detect(document,hours=None,limits=None,now=None,corrections=()):
         result.append({'id':key,'type':kind,'explanation':explanation,'evidenceIds':evidence,'at':at,'occurredAt':row.get('at'),
           'actorName':row.get('actorName') or row.get('actor_name') or 'Autor u staršího záznamu není evidován',
           'storeId':sid,'storeName':stores.get(sid,{}).get('name',row.get('storeName','')),'productId':pid,'productName':product.get('name',row.get('productName','')),
-          'quantity':row.get('qty'),'unit':row.get('unit') or product.get('unit',''),'sourceId':row.get('inventoryId') or row['id'],
+          'quantity':row.get('qty'),'expectedQuantity':row.get('expected'),'difference':row.get('difference'),'unit':row.get('unit') or product.get('unit',''),'sourceId':row.get('inventoryId') or row['id'],
           'sourceRoute':('#movements/'+quote(row['id'],safe='')) if row.get('reason') else ('#audit/'+quote(row['inventoryId'],safe='')) if row.get('inventoryId') else ('#product/'+quote(pid,safe='')+'/'+quote(sid,safe='')) if pid and sid else '#changes'})
     movements=sorted(document.get('moves',[]),key=lambda r:r.get('recordedAt') or timestamp(r['at']))
     recent=[r for r in movements if cutoff<=(r.get('recordedAt') or timestamp(r['at']))<=now+60]
+    def outside_context(row):
+        at=row.get('recordedAt') or timestamp(row['at'])
+        return ' Záznam vznikl mimo otevírací dobu; ověřte souvislosti.' if limits['outsideHours'] and within_hours(at,hours) is False else ''
+    # Deliveries, returns, issues and ordinary transfers are recorded operations,
+    # not evidence of an unexplained loss. Opening hours only add context.
     waste=defaultdict(list)
     for row in recent:
-        product=products.get(row['product'],{});unit=product.get('unit','ks');limit=limits['movementLimits'].get(unit,50)
-        if abs(row['qty'])>=limit:add('large_writeoff' if row['reason']=='Odpis' else 'large_movement',row,f"{row['reason']}: {abs(row['qty']):g} {unit}; nastavený limit je {limit:g} {unit}.")
-        if limits['outsideHours'] and within_hours(row.get('recordedAt') or timestamp(row['at']),hours) is False:add('outside_hours',row,'Pohyb byl zaznamenán mimo nastavenou otevírací dobu provozu.')
-        if row['reason']=='Odpis':waste[(row['store'],row['product'])].append(row)
+        if row['reason']!='Odpis' or row['qty']>=0:continue
+        unit=products.get(row['product'],{}).get('unit','ks');limit=limits['movementLimits'].get(unit,50)
+        if -row['qty']>=limit:
+            add('large_writeoff',row,f"Odpis {abs(row['qty']):g} {unit}; nastavený limit je {limit:g} {unit}."+outside_context(row))
+        waste[(row['store'],row['product'])].append(row)
     for rows in waste.values():
         last=rows[-1];at=last.get('recordedAt') or timestamp(last['at']);same=[r for r in rows if (r.get('recordedAt') or timestamp(r['at']))>=at-7*86400]
-        if len(same)>=limits['repeatedCount']:add('repeated_writeoff',last,f"{len(same)} odpisů stejného produktu ve skladu během sedmi dnů.",[r['id'] for r in same])
-    losses=defaultdict(list)
+        unit=products.get(last['product'],{}).get('unit','ks');total=-sum(r['qty'] for r in same);limit=limits['movementLimits'].get(unit,50)
+        if len(same)>=limits['repeatedCount'] and total>=limit:
+            add('repeated_writeoff',last,f"{len(same)} odpisů stejného produktu ve skladu během sedmi dnů, celkem {total:g} {unit}; limit {limit:g} {unit}."+outside_context(last),[r['id'] for r in same])
+    losses=defaultdict(dict)
     source_rows={r['id']:r for r in document.get('counts',[])+document.get('barInventories',[])}
     for row in observations(document):
         source=source_rows.get(row['id'],source_rows.get(row['id'].split(':')[0],{}))
         if source.get('recordedAt'):row['recordedAt']=source['recordedAt']
         at=row.get('recordedAt') or timestamp(row['at'])
-        if cutoff<=at<=now+60 and limits['outsideHours'] and within_hours(at,hours) is False:add('inventory_outside_hours',row,'Inventura byla zaznamenána mimo nastavenou otevírací dobu provozu.')
-        if cutoff<=at<=now+60 and row['difference'] is not None and row['difference']<0:losses[(row['storeId'],row['productId'],row['unit'])].append(row)
-        if row['difference'] is not None and row['expected'] is not None:
-            difference=abs(row['difference']);limit=limits['movementLimits'].get(row['unit'],50)
-            rate=difference/abs(row['expected'])*100 if row['expected'] else None
-            if difference>1e-8 and ((rate is not None and rate>=limits['lossPercent']) or difference>=limit):
-                add('inventory_difference',row,f"{'Manko' if row['difference']<0 else 'Přebytek'} {difference:g} {row['unit']}"+(f" ({rate:.1f} %; limit {limits['lossPercent']:g} %)." if rate is not None else '; výchozí stav byl nulový.'))
-    for rows in losses.values():
-        if len(rows)>=limits['repeatedCount']:add('repeated_shortage',rows[-1],f"Manko u stejného produktu ve skladu se opakuje v {len(rows)} inventurách za posledních 30 dní.",[r['id'] for r in rows])
+        if not cutoff<=at<=now+60 or row['difference'] is None or row['expected'] is None:continue
+        difference=abs(row['difference']);limit=limits['movementLimits'].get(row['unit'],50)
+        # Suppress rounding and small measurement discrepancies, including a 1/1
+        # count difference that would otherwise become a misleading 100% alert.
+        tolerance={'ks':1,'l':0.05,'kg':0.05,'balení':0}.get(row['unit'],0.001)
+        rate=difference/abs(row['expected'])*100 if row['expected'] else None
+        significant=difference>max(tolerance,1e-8) and ((rate is not None and rate>=limits['lossPercent']) or difference>=limit)
+        if not significant:continue
+        if row['difference']<0:losses[(row['storeId'],row['productId'],row['unit'])][row['inventoryId']]=row
+        add('inventory_difference',row,f"{'Manko' if row['difference']<0 else 'Přebytek'} {difference:g} {row['unit']}; očekáváno {row['expected']:g}, zjištěno {row['qty']:g}."+(f" Rozdíl {rate:.1f} %; limit {limits['lossPercent']:g} %." if rate is not None else ' Výchozí stav byl nulový.')+outside_context(row))
+    for grouped in losses.values():
+        rows=list(grouped.values())
+        if len(rows)>=limits['repeatedCount']:add('repeated_shortage',rows[-1],f"Významné manko stejného produktu ve skladu se opakuje v {len(rows)} různých inventurách za posledních 30 dní.",[r['id'] for r in rows])
     transfers=defaultdict(list)
     for row in recent:
         if row['reason']=='Přesun' and row.get('transferId'):transfers[row['transferId']].append(row)
@@ -102,15 +114,28 @@ def detect(document,hours=None,limits=None,now=None,corrections=()):
     for key,rows in transfers.items():
         outgoing=next((r for r in rows if r['qty']<0),None);incoming=next((r for r in rows if r['qty']>0),None)
         if outgoing and incoming:pairs.append((outgoing.get('recordedAt') or timestamp(outgoing['at']),outgoing,incoming))
-    previous={}
+    previous={};roundtrips=defaultdict(list);used=set()
     for at,outgoing,incoming in sorted(pairs,key=lambda p:p[0]):
         reverse=previous.get((outgoing['product'],incoming['store'],outgoing['store']))
-        if reverse and at-reverse[0]<=limits['transferMinutes']*60 and abs(outgoing['qty']-reverse[1]['qty'])<1e-8:
-            add('round_trip_transfer',outgoing,'Stejné množství bylo krátce po přesunu vráceno mezi stejnými sklady.',[reverse[1]['id'],outgoing['id']])
+        if reverse and reverse[1]['id'] not in used and at-reverse[0]<=limits['transferMinutes']*60 and abs(outgoing['qty']-reverse[1]['qty'])<1e-8:
+            key=(outgoing['product'],tuple(sorted((outgoing['store'],incoming['store']))))
+            roundtrips[key].append((at,reverse[1],outgoing));used.update((reverse[1]['id'],outgoing['id']))
         previous[(outgoing['product'],outgoing['store'],incoming['store'])]=(at,outgoing)
-    edits=[r for r in corrections if r.get('created_at',0)>=cutoff]
-    if len(edits)>=limits['repeatedCount']:
-        last=edits[-1];add('repeated_correction',last,f"{len(edits)} oprav schválených inventur za posledních 30 dnů.",[r['id'] for r in edits])
+    for trips in roundtrips.values():
+        latest=trips[-1][0];trips=[t for t in trips if t[0]>=latest-86400]
+        last=trips[-1][2];unit=products.get(last['product'],{}).get('unit','ks');total=sum(abs(t[2]['qty']) for t in trips)
+        if len(trips)>=limits['repeatedCount'] and total>=limits['movementLimits'].get(unit,50):
+            add('round_trip_transfer',last,f"{len(trips)} rychlých přesunů tam a zpět mezi stejnými sklady během 24 hodin, celkem {total:g} {unit}. Jednorázové vrácení přesunu se neoznačuje.",[r['id'] for t in trips for r in t[1:]])
+    # Corrections of unrelated inventories are normal administration. Review only
+    # repeated corrections to the very same approved inventory.
+    edits=defaultdict(list)
+    for row in corrections:
+        if cutoff<=row.get('created_at',0)<=now+60 and row.get('submission_id'):edits[row['submission_id']].append(row)
+    for rows in edits.values():
+        rows=sorted(rows,key=lambda r:(r['created_at'],r['id']))
+        if len(rows)>=limits['repeatedCount']:
+            last={**rows[-1],'inventoryId':rows[-1]['submission_id']}
+            add('repeated_correction',last,f"{len(rows)} oprav stejné schválené inventury za posledních 30 dnů; ověřte důvody oprav.",[r['id'] for r in rows])
     return sorted(result,key=lambda r:(r['at'],r['id']),reverse=True)
 
 def register(app):
@@ -128,11 +153,12 @@ def register(app):
     def owned(c,id):
         venue=one(c,'SELECT * FROM allin_venues WHERE id=%s AND owner_id=%s',(id,owner_scope()))
         if not venue:raise ApiError('Provoz neexistuje nebo k němu nemáte přístup.',404)
+        if venue.get('archived_at') is not None:raise ApiError('Provoz je archivovaný.',409)
         return venue
     def evaluate(venue):
         with venue_context(venue),db() as c:
             row=one(c,'SELECT data_json FROM stock_documents WHERE user_id=%s',(venue['owner_id'],));document=json.loads(row['data_json']) if row else {}
-            edits=allrows(c,"SELECT id,actor_name,created_at FROM inventory_review_events WHERE action='corrected' AND created_at>=%s ORDER BY created_at,id",(time.time()-30*86400,))
+            edits=allrows(c,"SELECT id,submission_id,actor_name,created_at FROM inventory_review_events WHERE action='corrected' AND created_at>=%s ORDER BY created_at,id",(time.time()-30*86400,))
         return detect(document,json.loads(venue['opening_hours_json']),json.loads(venue['attention_limits_json']),corrections=edits)
     @app.route('/api/owner/venues/<venue_id>/controls',methods=['GET','PUT'])
     @authenticated(admin=True)
@@ -152,7 +178,7 @@ def register(app):
     @app.get('/api/owner/attention')
     @authenticated(admin=True)
     def attention():
-        with db(central=True) as c:venues=allrows(c,'SELECT * FROM allin_venues WHERE owner_id=%s ORDER BY name,id',(owner_scope(),))
+        with db(central=True) as c:venues=allrows(c,'SELECT * FROM allin_venues WHERE owner_id=%s AND archived_at IS NULL ORDER BY name,id',(owner_scope(),))
         rows=[]
         for venue in venues:
             if request.args.get('venue') and request.args['venue']!=venue['id']:continue

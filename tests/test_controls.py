@@ -66,7 +66,7 @@ def test_owner_controls_low_stock_and_case_resolution_is_scoped(hub):
  venue=next(v for v in client.get('/api/owner/venues').json['venues'] if v['id']==vid)
  assert venue['belowMinimum']==1 and venue['lowStock'][0]['quantity']==5 and venue['lowStock'][0]['minimum']==5
  alerts=client.get('/api/owner/attention').json['alerts'];case=next(a for a in alerts if a['venueId']==vid and a['type']=='large_writeoff')
- assert any(a['type']=='outside_hours' for a in alerts) and case['actorName'] and case['evidenceIds']==['w1']
+ assert not any(a['type']=='outside_hours' for a in alerts) and 'mimo otevírací dobu' in case['explanation'] and case['actorName'] and case['evidenceIds']==['w1']
  action='/api/owner/venues/'+vid+'/attention/'+case['id']
  assert client.post(action,json={'resolved':True,'note':'Dodací obaly poškozené'},headers=headers).status_code==200
  saved=next(a for a in client.get('/api/owner/attention').json['alerts'] if a['id']==case['id'])
@@ -110,7 +110,7 @@ def test_writeoff_is_separate_capability_and_cannot_be_forged(hub):
 
 def test_detection_has_evidence_respects_limits_and_ignores_missing_baseline():
  data=document();now=time.time()
- for i in range(3):data['moves'].append({'id':'w'+str(i),'store':'s','product':'p','qty':-1,'reason':'Odpis','note':'Rozbité zboží','actorName':'Test','recordedAt':now-i*60,'at':datetime.fromtimestamp(now-i*60,timezone.utc).isoformat()})
+ for i in range(3):data['moves'].append({'id':'w'+str(i),'store':'s','product':'p','qty':-40,'reason':'Odpis','note':'Rozbité zboží','actorName':'Test','recordedAt':now-i*60,'at':datetime.fromtimestamp(now-i*60,timezone.utc).isoformat()})
  result=detect(data,limits={'movementLimits':{'ks':100}},now=now)
  assert any(a['type']=='repeated_writeoff' and len(a['evidenceIds'])==3 for a in result)
  assert not any(a['type'] in ('large_writeoff','inventory_difference','outside_hours') for a in result)
@@ -141,3 +141,38 @@ def test_terminal_writeoff_requires_permission_reason_and_is_idempotent(hub):
  assert client.post('/api/owner/venues/'+vid+'/members/'+employee['id'],json={'permissions':{**employee['permissions'],'stock.writeoff':False}},headers=h).status_code==200
  wh=pin_login();data['operationId']=str(uuid.uuid4());data['revision']=client.get(prefix+'/api/work/stock').json['revision']
  assert client.post(prefix+'/api/work/move',json=data,headers=wh).status_code==403
+
+
+def test_deliveries_returns_issues_and_out_of_hours_stocktakes_are_normal():
+ now=time.time();at=lambda offset:datetime.fromtimestamp(now+offset,timezone.utc).isoformat()
+ data=document();data['counts']=[{'id':'first','product':'p','store':'s','qty':100,'at':at(-100)}]
+ for i,(reason,qty) in enumerate([('Příjem',500),('Vratka',100),('Výdej',-200)]):
+  data['moves'].append({'id':str(i),'store':'s','product':'p','reason':reason,'qty':qty,'at':at(-90+i),'recordedAt':now-90+i})
+ data['counts'].append({'id':'last','store':'s','product':'p','qty':500,'expected':500,'at':at(-10)})
+ assert detect(data,hours=hours(),now=now)==[]
+ data['counts'][-1].update(qty=450)
+ alerts=detect(data,hours=hours(),now=now)
+ assert len(alerts)==1 and alerts[0]['type']=='inventory_difference'
+ assert alerts[0]['expectedQuantity']==500 and alerts[0]['difference']==-50
+ assert 'očekáváno 500' in alerts[0]['explanation'] and 'mimo otevírací dobu' in alerts[0]['explanation']
+
+
+def test_tiny_shortages_and_routine_small_writeoffs_do_not_accumulate_noise():
+ now=time.time();data=document();data['counts']=[]
+ for i in range(4):
+  at=datetime.fromtimestamp(now-100+i,timezone.utc).isoformat()
+  data['counts'].append({'id':'c'+str(i),'inventoryId':'i'+str(i),'store':'s','product':'p','qty':0,'expected':1,'at':at})
+  data['moves'].append({'id':'w'+str(i),'store':'s','product':'p','reason':'Odpis','qty':-1,'at':at})
+ assert detect(data,hours=hours(),now=now)==[]
+
+
+def test_one_round_trip_and_corrections_of_different_inventories_are_normal():
+ now=time.time();data=document()
+ for i,(store,qty) in enumerate([('s',-100),('other',100),('other',-100),('s',100)]):
+  data['moves'].append({'id':'t'+str(i),'store':store,'product':'p','qty':qty,'reason':'Přesun','transferId':'pair'+str(i//2),'at':datetime.fromtimestamp(now-100+i,timezone.utc).isoformat()})
+ corrections=[{'id':'edit'+str(i),'submission_id':'inventory'+str(i),'created_at':now-i,'actor_name':'Majitel'} for i in range(3)]
+ assert detect(data,hours=hours(),now=now,corrections=corrections)==[]
+ for row in corrections:row['submission_id']='same-inventory'
+ alerts=detect(data,now=now,corrections=corrections)
+ assert len(alerts)==1 and alerts[0]['type']=='repeated_correction'
+ assert len(alerts[0]['evidenceIds'])==3
