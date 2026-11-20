@@ -40,7 +40,7 @@ with sync_playwright() as p:
  current=manager.request.get(prefix+'/api/stock').json();assert next(r for r in current['data']['counts'] if r.get('reviewId')==pending)['qty']==95
  assert manager.request.get(BASE+'/api/owner/analytics').status==401
  owner.goto(BASE+'/#comparison');owner.locator('#owner-intelligence h3').filter(has_text='1. Vývoj manka').wait_for();owner.locator('#owner-intelligence h3').filter(has_text='4. Tržby a marže').wait_for()
- assert owner.locator('#owner-nav a').count()==8
+ assert owner.locator('#owner-nav a').count()==9
  owner.locator('#owner-intelligence details').evaluate('(el)=>el.open=true');recipe=owner.locator('[data-recipe-form]');recipe.locator('[name=venue]').select_option(venue);recipe.locator('[name=salesCode]').fill('DISH');recipe.locator('[name=from]').fill('2026-01-01');recipe.locator('[data-quantity]').fill('0.25');recipe.locator('[name=reason]').fill('Výchozí ověřená receptura');recipe.locator('button.primary').click()
  owner.locator('#owner-intelligence td').filter(has_text='DISH').first.wait_for()
  owner.locator('#owner-intelligence details').evaluate('(el)=>el.open=true');imports=owner.locator('[data-item-import]');imports.locator('[name=venue]').select_option(venue);imports.locator('[name=from]').fill('2026-01-01');imports.locator('[name=to]').fill('2026-01-01')

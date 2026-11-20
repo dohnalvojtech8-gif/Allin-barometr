@@ -77,7 +77,7 @@ def register(app):
     from server.app import authenticated,db,one,allrows,execute,body,ApiError,uid,TEST_DB,SUPABASE_DATABASE_URL,WEB,has_permission,audit,write_stock_changes,stock_latest_changes
     from server.work import store_scope,scoped_stock
     from server.allin import venue_context
-    from server.stock import validate_stock,prepare_counts,attribute_records
+    from server.stock import validate_stock,prepare_counts,attribute_records,whole_bottles
     with db(central=True) as c:venues=allrows(c,'SELECT * FROM allin_venues')
     for venue in venues:
         with app.test_request_context(),venue_context(venue),db() as c:
@@ -115,7 +115,7 @@ def register(app):
             after=copy.deepcopy(before);after['products'].append(product)
             try:after=validate_stock(after);validate_links(c,before,after,owner())
             except ValueError as error:raise ApiError(str(error))
-            if product.get('catalogProductId') and product['unit'] in ('ks','balení') and not float(quantity).is_integer():raise ApiError('Počet lahví nebo balení musí být celé číslo.')
+            if not whole_bottles(product,quantity):raise ApiError('Počet lahví nebo balení musí být celé číslo.')
             count={'id':uid(),'inventoryId':'opening-'+product['id'],'store':sid,'product':product['id'],'qty':quantity,'at':datetime.now(timezone.utc).isoformat(),'kind':'warehouse','method':'Prvotní stav při vytvoření produktu'}
             after['counts'].append(count);after=validate_stock(after);after=prepare_counts(before,attribute_records(before,after,g.user));count['opening']=True
             if not row:execute(c,'INSERT INTO stock_documents (user_id,revision,data_json,updated_at) VALUES (%s,0,%s,%s)',(owner(),json.dumps(before),time.time()))

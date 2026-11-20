@@ -126,11 +126,18 @@ def register(app):
         n=execute(c,'UPDATE stock_documents SET data_json=%s,revision=revision+1,updated_at=%s WHERE user_id=%s AND revision=%s',(json.dumps(new,ensure_ascii=False),time.time(),owner,revision)).rowcount
         if n!=1:raise ApiError('Stav skladu se změnil. Načtěte jej a zápis zopakujte.',409)
         write_stock_changes(c,owner,old,new,revision+1)
+        from server.deliveries import capture_receipts
+        capture_receipts(c,old,new,owner)
         execute(c,'UPDATE work_sessions SET last_activity=%s WHERE token_hash=%s',(time.time(),digest(request.cookies.get(SESSION,''))))
         return new
 
     @app.get('/work')
     def work_page():return send_from_directory(WEB,'work.html')
+    @app.get('/api/work/opening-status')
+    @worker()
+    def work_opening_status():
+        from server.controls import opening_status
+        return jsonify(status=opening_status(json.loads((getattr(g,'venue',None) or {}).get('opening_hours_json') or '{}')))
     @app.get('/work.js')
     def work_js():return send_from_directory(WEB,'work.js')
     @app.get('/work.css')

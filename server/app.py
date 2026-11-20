@@ -83,6 +83,8 @@ SCHEMA.extend(REVIEW_TABLES)
 from server.stock_products import TABLES as PRODUCT_TABLES
 from server.bar_stock import TABLES as BOTTLE_TABLES
 SCHEMA.extend(PRODUCT_TABLES+BOTTLE_TABLES)
+from server.deliveries import TABLES as DELIVERY_TABLES
+SCHEMA.extend(DELIVERY_TABLES)
 from server.notifications import OUTBOX_SQL
 SCHEMA.append(OUTBOX_SQL)
 
@@ -658,6 +660,8 @@ def stock_document():
         archive_runs(c,old,clean,g.user)
         if data.get('kegMeasurement') is not None:save_keg_reading(c,clean,owner_id,data['kegMeasurement'])
         clean=stage(c,old,clean,owner_id)
+        from server.deliveries import capture_receipts
+        capture_receipts(c,old,clean,owner_id)
         changed=execute(c,'UPDATE stock_documents SET data_json=%s,revision=revision+1,updated_at=%s WHERE user_id=%s AND revision=%s',(json.dumps(clean,ensure_ascii=False),time.time(),owner_id,revision)).rowcount
         if changed!=1:raise ApiError('Sklad byl změněn na jiném zařízení. Obnovte stránku.',409)
         write_stock_changes(c,owner_id,old,clean,revision+1)
@@ -741,7 +745,7 @@ def stock_script():return send_from_directory(WEB,'stock.js')
 def health():
     with db() as c:execute(c,'SELECT 1')
     from server.vision import configuration
-    return jsonify(status='ok',version='1.9.0',application='NOIRA',database='supabase' if SUPABASE_DATABASE_URL else 'postgres',freeUnlocks=FREE_UNLOCKS,automaticLevelEnabled=configuration()['enabled'],shopBundleTemplates=len(SHOP_TEMPLATES))
+    return jsonify(status='ok',version='2.0.0',application='NOIRA',database='supabase' if SUPABASE_DATABASE_URL else 'postgres',freeUnlocks=FREE_UNLOCKS,automaticLevelEnabled=configuration()['enabled'],shopBundleTemplates=len(SHOP_TEMPLATES))
 @app.get('/')
 def index():return send_from_directory(WEB,'index.html' if getattr(g,'venue',None) else 'owner.html')
 @app.get('/designs.js')
@@ -827,6 +831,8 @@ from server.stock_products import register as register_stock_products
 register_stock_products(app)
 from server.bar_stock import register as register_bar_stock
 register_bar_stock(app)
+from server.deliveries import register as register_deliveries
+register_deliveries(app)
 
 @app.get('/noira.css')
 def noira_theme():return send_from_directory(WEB,'noira.css')

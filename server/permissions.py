@@ -4,6 +4,7 @@ PERMISSIONS={
  'stock.view':('Prohlížet sklady',True),
  'stock.edit':('Vytvářet a upravovat sklady a produkty',True),
  'stock.receive':('Přijímat dodávky',True),
+ 'deliveries.view':('Prohlížet historii dodávek a faktury',True),
  'stock.move':('Vydávat a přesouvat zboží',True),
  'stock.writeoff':('Odepisovat zboží',False),
  'inventory.run':('Provádět a ukládat inventury',True),
