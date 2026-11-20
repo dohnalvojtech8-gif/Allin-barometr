@@ -80,6 +80,9 @@ from server.staff import POSITION_SQL
 SCHEMA.append(POSITION_SQL)
 from server.reviews import TABLES as REVIEW_TABLES
 SCHEMA.extend(REVIEW_TABLES)
+from server.stock_products import TABLES as PRODUCT_TABLES
+from server.bar_stock import TABLES as BOTTLE_TABLES
+SCHEMA.extend(PRODUCT_TABLES+BOTTLE_TABLES)
 from server.notifications import OUTBOX_SQL
 SCHEMA.append(OUTBOX_SQL)
 
@@ -481,8 +484,12 @@ def put_state():
     else:clean.update(rows=[],records=[])
     clean['inventoryPlan']=plan
     with db() as c:
+        from server.bar_stock import protect_archived
+        protect_archived(c,g.user,old,clean)
         changed=execute(c,'UPDATE users SET state_json=%s WHERE id=%s AND state_json=%s',(json.dumps(clean,ensure_ascii=False),workspace_id(),g.user['state_json'])).rowcount
         if changed!=1:raise ApiError('Inventura byla mezitím změněna. Obnovte stránku a změnu zopakujte.',409)
+        from server.bar_stock import record_depletions
+        record_depletions(c,g.user,old,clean)
         if clean.get('rows')!=old.get('rows') or clean.get('records')!=old.get('records'):audit(c,g.user['id'],'inventory_saved','Uložení inventury')
         elif clean.get('inventoryPlan')!=old.get('inventoryPlan'):audit(c,g.user['id'],'inventory_plan_changed','Změna pořadí nebo průběhu inventury')
         elif clean.get('cycle')!=old.get('cycle') or clean.get('closing')!=old.get('closing'):audit(c,g.user['id'],'settings_changed','Změna nastavení')
@@ -626,12 +633,18 @@ def stock_document():
     except (StockValidationError,TypeError,KeyError) as e:raise ApiError(str(e) if isinstance(e,StockValidationError) else 'Neplatná skladová data.')
     revision=data['revision']
     with db() as c:
-        empty={'stores':[],'products':[],'counts':[],'moves':[],'draft':None,'barInventories':[]}
+        empty={'stores':[{'id':'main','name':'Hlavní sklad'}],'products':[],'counts':[],'moves':[],'draft':None,'barInventories':[]}
         execute(c,'INSERT INTO stock_documents (user_id,revision,data_json,updated_at) VALUES (%s,0,%s,%s) ON CONFLICT (user_id) DO NOTHING',(owner_id,json.dumps(empty),time.time()))
         row=one(c,'SELECT data_json,revision FROM stock_documents WHERE user_id=%s',(owner_id,))
         if row['revision']!=revision:raise ApiError('Sklad byl změněn na jiném zařízení. Načtěte aktuální stav a změnu zopakujte.',409)
         old=json.loads(row['data_json'])
         clean=merge_scoped_stock(old,clean,store_scope(c,g.user))
+        try:clean=validate_stock(clean)
+        except StockValidationError as e:raise ApiError(str(e))
+        from server.stock_products import validate_links,save_keg_reading
+        from server.bar_stock import prepare_new_runs,archive_runs,refresh_history
+        validate_links(c,old,clean,owner_id)
+        clean=prepare_new_runs(c,old,clean,g.user)
         try:clean=validate_stock(clean)
         except StockValidationError as e:raise ApiError(str(e))
         for permission in required_permissions(old,clean):
@@ -641,6 +654,9 @@ def stock_document():
         clean=prepare_counts(old,attribute_records(old,clean,g.user))
         from server.reviews import stage,protect_closed,event as review_event
         corrected=protect_closed(old,clean,data.get('correctionReason'))
+        refresh_history(c,old,clean,owner_id)
+        archive_runs(c,old,clean,g.user)
+        if data.get('kegMeasurement') is not None:save_keg_reading(c,clean,owner_id,data['kegMeasurement'])
         clean=stage(c,old,clean,owner_id)
         changed=execute(c,'UPDATE stock_documents SET data_json=%s,revision=revision+1,updated_at=%s WHERE user_id=%s AND revision=%s',(json.dumps(clean,ensure_ascii=False),time.time(),owner_id,revision)).rowcount
         if changed!=1:raise ApiError('Sklad byl změněn na jiném zařízení. Obnovte stránku.',409)
@@ -725,7 +741,7 @@ def stock_script():return send_from_directory(WEB,'stock.js')
 def health():
     with db() as c:execute(c,'SELECT 1')
     from server.vision import configuration
-    return jsonify(status='ok',version='1.8.0',application='NOIRA',database='supabase' if SUPABASE_DATABASE_URL else 'postgres',freeUnlocks=FREE_UNLOCKS,automaticLevelEnabled=configuration()['enabled'],shopBundleTemplates=len(SHOP_TEMPLATES))
+    return jsonify(status='ok',version='1.9.0',application='NOIRA',database='supabase' if SUPABASE_DATABASE_URL else 'postgres',freeUnlocks=FREE_UNLOCKS,automaticLevelEnabled=configuration()['enabled'],shopBundleTemplates=len(SHOP_TEMPLATES))
 @app.get('/')
 def index():return send_from_directory(WEB,'index.html' if getattr(g,'venue',None) else 'owner.html')
 @app.get('/designs.js')
@@ -807,6 +823,10 @@ from server.operations import register as register_operations
 register_operations(app)
 from server.controls import register as register_controls
 register_controls(app)
+from server.stock_products import register as register_stock_products
+register_stock_products(app)
+from server.bar_stock import register as register_bar_stock
+register_bar_stock(app)
 
 @app.get('/noira.css')
 def noira_theme():return send_from_directory(WEB,'noira.css')

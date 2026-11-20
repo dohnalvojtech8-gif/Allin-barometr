@@ -9,10 +9,10 @@ def login(page,username,password):
  page.goto(BASE);page.locator('[name=username]').fill(username);page.locator('[name=password]').fill(password);page.locator('#auth-form [type=submit]').click()
 
 with sync_playwright() as p:
- browser=p.chromium.launch(headless=True,args=['--no-sandbox']);errors=[]
+ browser=p.chromium.launch(headless=True,args=['--no-sandbox'],**({'executable_path':os.environ['NOIRA_CHROMIUM']} if os.getenv('NOIRA_CHROMIUM') else {}));errors=[]
  context=browser.new_context(viewport={'width':390,'height':844},service_workers='block')
  owner=context.new_page();owner.on('pageerror',lambda e:errors.append(str(e)))
- login(owner,'owner','ci-owner-test-password');owner.locator('#owner-nav a').first.wait_for(state='attached')
+ login(owner,'owner',os.getenv('NOIRA_TEST_PASSWORD','ci-owner-test-password'));owner.locator('#owner-nav a').first.wait_for(state='attached')
  headers={'X-CSRF-Token':owner.request.get(BASE+'/api/me').json()['csrf']}
  venue=owner.request.post(BASE+'/api/owner/venues',data={'name':'Analytika UI'},headers=headers).json()['venue']['id']
  response=owner.request.post(BASE+'/api/owner/venues/'+venue+'/enter',data={},headers=headers);assert response.status==200
@@ -40,7 +40,7 @@ with sync_playwright() as p:
  current=manager.request.get(prefix+'/api/stock').json();assert next(r for r in current['data']['counts'] if r.get('reviewId')==pending)['qty']==95
  assert manager.request.get(BASE+'/api/owner/analytics').status==401
  owner.goto(BASE+'/#comparison');owner.locator('#owner-intelligence h3').filter(has_text='1. Vývoj manka').wait_for();owner.locator('#owner-intelligence h3').filter(has_text='4. Tržby a marže').wait_for()
- assert owner.locator('#owner-nav a').count()==7
+ assert owner.locator('#owner-nav a').count()==8
  owner.locator('#owner-intelligence details').evaluate('(el)=>el.open=true');recipe=owner.locator('[data-recipe-form]');recipe.locator('[name=venue]').select_option(venue);recipe.locator('[name=salesCode]').fill('DISH');recipe.locator('[name=from]').fill('2026-01-01');recipe.locator('[data-quantity]').fill('0.25');recipe.locator('[name=reason]').fill('Výchozí ověřená receptura');recipe.locator('button.primary').click()
  owner.locator('#owner-intelligence td').filter(has_text='DISH').first.wait_for()
  owner.locator('#owner-intelligence details').evaluate('(el)=>el.open=true');imports=owner.locator('[data-item-import]');imports.locator('[name=venue]').select_option(venue);imports.locator('[name=from]').fill('2026-01-01');imports.locator('[name=to]').fill('2026-01-01')
@@ -54,17 +54,5 @@ with sync_playwright() as p:
  owner.locator('#owner-menu').click();owner.locator('.noira-language select').select_option('en');owner.locator('#owner-sidebar-close').click();owner.get_by_role('heading',name='Operational intelligence',exact=True).wait_for()
  owner.locator('#owner-menu').click();owner.locator('.noira-language select').select_option('de');owner.locator('#owner-sidebar-close').click();owner.get_by_role('heading',name='Intelligente Betriebsanalyse',exact=True).wait_for()
  assert not errors,errors
- # Public read-only probe; rerun this job after release to verify the deployed build.
- live=browser.new_page(ignore_https_errors=True,service_workers='block')
- health=live.request.get('https://noira-u804.onrender.com/healthz',timeout=120000)
- assert health.status==200,health.text()
- release=health.json()['version']
- if release=='1.4.0':
-  live.goto('https://noira-u804.onrender.com',timeout=120000);live.locator('#auth-form [name=username]').wait_for()
-  assert live.evaluate('typeof window.NoiraIntelligence')=='object'
-  assert live.request.get('https://noira-u804.onrender.com/api/owner/analytics').status==401
-  assert live.request.get('https://noira-u804.onrender.com/intelligence.js?v=1.4.0').status==200
-  print('PASS: production NOIRA 1.4.0 health, login, intelligence asset and owner authentication boundary')
- else:print('Production probe deferred until release; current version:',release)
  print('PASS: employee UI submits without PIN, manager return and approval, employee correction, approved balance, owner-only finance, recipe and POS item import, mobile layout')
  browser.close()

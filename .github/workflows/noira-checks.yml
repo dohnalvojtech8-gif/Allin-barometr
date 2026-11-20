@@ -44,6 +44,7 @@ jobs:
           cat /tmp/noira-ci-server.log
           exit 1
       - run: python tests/noira-intelligence-browser.py
+      - run: python tests/stock-products-browser.py
       - name: Server log on failure
         if: failure()
         run: test ! -f /tmp/noira-ci-server.log || cat /tmp/noira-ci-server.log

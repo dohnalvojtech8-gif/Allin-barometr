@@ -221,6 +221,8 @@ def register(app):
             quantities=values['quantities']
             if set(quantities)!=set(items) or any(type(v) not in (int,float) or not math.isfinite(v) or not 0<=v<=1e12 for v in quantities.values()):raise ApiError('Zadejte nezáporná množství všech položek.')
             for key,item in items.items():item['qty']=quantities[key]
+            from server.bar_stock import restore_corrections
+            restore_corrections(c,owner_id(),row['submitted_by'],content,reason)
             # Weighted bar lines are represented once in each format; keep both consistent.
             for bar in content['bars']:
                 for item in bar['items']:

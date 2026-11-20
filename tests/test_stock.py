@@ -32,7 +32,7 @@ def test_stale_device_cannot_overwrite_newer_inventory():
 
 def test_stock_rejects_invalid_references_nonfinite_counts_and_duplicate_ids():
  a,h=login()
- for mutate in [lambda d:d['counts'][0].update(store='other'),lambda d:d['counts'][0].update(qty=-1),lambda d:d['counts'][0].update(qty=float('inf')),lambda d:d['products'].append(copy.deepcopy(d['products'][0])),lambda d:d['products'][0].update(kind='keg',unit='ks')]:
+ for mutate in [lambda d:d['counts'][0].update(store='other'),lambda d:d['counts'][0].update(qty=-1),lambda d:d['counts'][0].update(qty=float('inf')),lambda d:d['products'].append(copy.deepcopy(d['products'][0])),lambda d:d['products'][0].update(kind='keg',unit='gal')]:
   d=payload();mutate(d);rev=a.get('/api/stock').json['revision']
   assert a.put('/api/stock',json={'revision':rev,'data':d},headers=h).status_code==400
  assert a.get('/stock.js').status_code==200

@@ -106,10 +106,11 @@ def register(app):
                     if qty is None:unmeasured+=1;continue
                     known+=1;unit=product['unit'];quantities[unit]=quantities.get(unit,0)+qty
                     if at_minimum(product,qty):low+=1
-            inventory_ids={r.get('inventoryId') or r['store']+'|'+r['at'] for r in data['counts']}
+            inventory_ids={r.get('inventoryId') or r['store']+'|'+r['at'] for r in data['counts'] if not r.get('opening')}
             inventory_ids.update(r['id'] for r in data.get('barInventories',[]))
             runs={r['id']:{'at':r['at'],'items':r['items']} for r in data.get('barInventories',[])}
             for count in data['counts']:
+                if count.get('opening'):continue
                 key=count.get('inventoryId') or count['store']+'|'+count['at']
                 if key in {r['id'] for r in data.get('barInventories',[])}:continue
                 run=runs.setdefault(key,{'at':count['at'],'items':[]})

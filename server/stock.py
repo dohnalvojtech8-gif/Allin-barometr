@@ -28,6 +28,13 @@ def validate_stock(data):
         if not isinstance(s,dict) or not text(s.get('id'),100) or s['id'] in stores or not text(s.get('name'),100):raise StockValidationError('Neplatný sklad.')
         if 'color' in s and (not isinstance(s['color'],str) or not re.fullmatch(r'#[0-9a-fA-F]{6}',s['color'])):raise StockValidationError('Neplatná barva skladu.')
         if s.get('colorStyle','fill') not in ('fill','border'):raise StockValidationError('Neplatné zobrazení barvy skladu.')
+        if 'categories' in s:
+            categories=s['categories']
+            if not isinstance(categories,list) or len(categories)>50:raise StockValidationError('Neplatné kategorie skladu.')
+            names=set()
+            for category in categories:
+                if not isinstance(category,dict) or not text(category.get('name'),80) or category.get('kind') not in ('piece','keg','liquid','wine','weight') or category['name'].casefold() in names:raise StockValidationError('Kategorie musí mít jedinečný název a platný typ.')
+                names.add(category['name'].casefold())
         stores.add(s['id'])
         if s.get('archivedAt') is not None and not date(s['archivedAt']):raise StockValidationError('Neplatné datum odstranění skladu.')
     for p in data['products']:
@@ -39,15 +46,19 @@ def validate_stock(data):
         if p.get('fullWeightKg',0)>0 and p['fullWeightKg']<=p.get('tare',0):raise StockValidationError('Plný obal musí vážit více než prázdný.')
         if not text(p.get('referenceId',''),100,True):raise StockValidationError('Neplatný odkaz na zdroj produktu.')
         if not text(p.get('tapName',''),150,True):raise StockValidationError('Neplatný název volby sládků.')
-        if p.get('kind') not in ('piece','keg','wine','liquid','weight') or p.get('unit') not in ('ks','l','kg','balení'):raise StockValidationError('Neplatná jednotka nebo typ produktu.')
+        if p.get('kind') not in ('piece','keg','wine','liquid','weight') or p.get('unit') not in ('ks','l','ml','kg','balení'):raise StockValidationError('Neplatná jednotka nebo typ produktu.')
         if p.get('min') is None:p['min']=0;p['minEnabled']=False
         if 'minEnabled' in p and type(p['minEnabled']) is not bool:raise StockValidationError('Neplatné nastavení minimální zásoby.')
         if not all(number(p.get(k)) for k in ('cost','min','tare','capacity')) or not number(p.get('density'),True):raise StockValidationError('Neplatné množství nebo cena produktu.')
-        if p['kind'] in ('keg','wine','liquid') and (p['unit']!='l' or p['capacity']<=0):raise StockValidationError('Sudy a víno vyžadují jednotku l a kladný objem.')
+        for key in ('catalogProductId','kegProfileId'):
+            if p.get(key) is not None and not text(p[key],100,True):raise StockValidationError('Neplatné propojení produktu.')
+        if p.get('catalogProductId') and (type(p.get('catalogCapacityMl')) is not int or not 0<p['catalogCapacityMl']<=100000):raise StockValidationError('Neplatná velikost lahve.')
+        if p.get('kegWeightState','') not in ('','full','empty'):raise StockValidationError('Neplatný stav sudu.')
         if not text(p.get('supplier',''),150,True) or not text(p.get('barcode',''),100,True):raise StockValidationError('Neplatný dodavatel nebo čárový kód.')
     for kind,seen in [('counts',count_ids),('moves',move_ids)]:
         for row in data[kind]:
             if not isinstance(row,dict) or not text(row.get('id'),100) or row['id'] in seen or row.get('store') not in stores or row.get('product') not in products or not date(row.get('at')):raise StockValidationError('Neplatný skladový záznam.')
+            if kind=='counts' and any(p['id']==row['product'] and p.get('catalogProductId') and p['unit'] in ('ks','balení') for p in data['products']) and type(row.get('qty')) in (int,float) and not float(row['qty']).is_integer():raise StockValidationError('Počet skladových lahví nebo balení musí být celé číslo.')
             seen.add(row['id'])
             if row.get('inventoryId') is not None and not text(row['inventoryId'],100):raise StockValidationError('Neplatné ID inventury.')
             if row.get('kind','warehouse') not in ('warehouse','bar'):raise StockValidationError('Neplatný typ inventury.')
@@ -185,6 +196,7 @@ def attribute_records(before,after,actor):
                     if field in old[row['id']]:row[field]=old[row['id']][field]
                     else:row.pop(field,None)
             else:
+                row.pop('opening',None)
                 row.update(fields)
                 if actor['role']!='admin':row['at']=now.isoformat()
     return after

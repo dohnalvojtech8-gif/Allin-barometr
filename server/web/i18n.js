@@ -6,6 +6,81 @@ window.NoiraI18n=(()=>{
  const dictionary=new Map(),lowercase=new Map(),textSources=new WeakMap(),attributeSources=new WeakMap();
  function add(source,en,de){dictionary.set(source,[source,en,de]);lowercase.set(source.toLocaleLowerCase('cs'),[source,en,de])}
  const copy=`
+Centrální rozhraní majitele|Central owner interface|Zentraler Inhaberbereich
+Zatím nemáte uložené sudy.|No saved kegs yet.|Noch keine gespeicherten Fässer.
+Kategorie produktů|Product categories|Produktkategorien
+Kategorie|Category|Kategorie
+Uložené sudy|Saved kegs|Gespeicherte Fässer
+Vyberte uložený sud (volitelné)|Choose a saved keg (optional)|Gespeichertes Fass wählen (optional)
+Zatím nemáte uložený sud. Vytvořte vlastní; údaje z vážení se uloží pro příště.|No saved kegs yet. Create your own; weighing data will be saved for reuse.|Noch keine gespeicherten Fässer. Erstellen Sie ein eigenes; Wiegedaten werden zur Wiederverwendung gespeichert.
+Lihoviny aktivované pro bar|Spirits activated for the bar|Für die Bar aktivierte Spirituosen
+Bez propojení s barem|No link to the bar|Keine Verknüpfung mit der Bar
+Velikost lahve|Bottle size|Flaschengröße
+Propojená lahev se při inventuře baru zobrazí společně se skladovou zásobou.|The linked bottle will appear alongside warehouse stock in the bar inventory.|Die verknüpfte Flasche wird bei der Barinventur zusammen mit dem Lagerbestand angezeigt.
+Jednotky produktu|Product units|Produkteinheiten
+Ks – kusy|Pcs – pieces|Stk – Stück
+L – litr|L – litre|L – Liter
+Ml – mililitr|Ml – millilitre|Ml – Milliliter
+Kg – kilogramy|Kg – kilograms|Kg – Kilogramm
+B – balení|B – packs|B – Packungen
+Minimální množství ve skladu (volitelné)|Minimum stock quantity (optional)|Mindestlagerbestand (optional)
+Bez upozornění|No alert|Keine Warnung
+Prvotní stav při vytvoření a zaskladnění|Opening stock on product creation|Anfangsbestand bei Produkterstellung
+Můžete ponechat 0 a zboží přijmout později.|You can leave 0 and receive stock later.|Sie können 0 belassen und die Ware später einlagern.
+Parametry pro vážení|Weighing parameters|Wiegeparameter
+Celková hmotnost plného obalu (kg)|Total weight of full container (kg)|Gesamtgewicht des vollen Behälters (kg)
+Hmotnost jedné jednotky (kg)|Weight per unit (kg)|Gewicht je Einheit (kg)
+Další údaje produktu|Additional product details|Weitere Produktangaben
+Vyberte hmotnost sudu|Select keg reference weight|Referenzgewicht des Fasses wählen
+Plný sud|Full keg|Volles Fass
+Prázdný sud|Empty keg|Leeres Fass
+Zatím nezváženo|Not weighed yet|Noch nicht gewogen
+Výběr hmotnosti nemění prvotní zásobu.|Selecting a weight does not change opening stock.|Die Gewichtsauswahl ändert den Anfangsbestand nicht.
+Přidat kategorii|Add category|Kategorie hinzufügen
+Název kategorie|Category name|Kategoriename
+Odstranit kategorii|Remove category|Kategorie entfernen
+Uložit kategorie|Save categories|Kategorien speichern
+Obal / jiné kusové zboží|Packaging / other piece goods|Verpackung / sonstige Stückware
+Kategorie můžete přejmenovat, přidat nebo odstranit. Existující produkty ani historie se odstraněním kategorie nesmažou.|You can rename, add or remove categories. Removing a category preserves existing products and history.|Sie können Kategorien umbenennen, hinzufügen oder entfernen. Bestehende Produkte und der Verlauf bleiben beim Entfernen einer Kategorie erhalten.
+Na baru i ve skladu, rozdělené podle nápoje a velikosti lahve.|Bar and warehouse stock, grouped by drink and bottle size.|Bar- und Lagerbestand, nach Getränk und Flaschengröße gruppiert.
+Načítání přehledu…|Loading summary…|Übersicht wird geladen…
+Znovu načíst přehled|Reload summary|Übersicht neu laden
+Lahve celkem|Total bottles|Flaschen insgesamt
+lahví celkem|bottles in total|Flaschen insgesamt
+Plných|Full|Voll
+Načatých / poloprázdných|Opened / partially full|Angebrochen / teilweise gefüllt
+Prázdných k archivaci|Empty for archiving|Leere zur Archivierung
+Vypité od minulé inventury|Emptied since last inventory|Seit der letzten Inventur geleert
+Vypité lahve se evidují při změně obsahu z kladného množství na 0 ml. Nejde o počet účtenek z pokladny.|Emptied bottles are recorded when their contents change from a positive amount to 0 ml. This is not the number of POS receipts.|Geleerte Flaschen werden erfasst, wenn ihr Inhalt von einer positiven Menge auf 0 ml sinkt. Dies ist nicht die Anzahl der Kassenbelege.
+Na baru|At the bar|An der Bar
+Ve skladu|In the warehouse|Im Lager
+Bez ověřeného stavu|No verified stock level|Kein bestätigter Bestand
+Není propojená skladová položka|No linked warehouse item|Kein verknüpfter Lagerartikel
+Celkový obsah|Total contents|Gesamtinhalt
+Nelze určit úplný obsah|Total contents cannot be determined|Gesamtinhalt nicht bestimmbar
+Úplný počet lahví lze určit u skladové zásoby vedené v kusech nebo baleních.|The total bottle count can be determined for warehouse stock tracked in pieces or packs.|Die Gesamtzahl der Flaschen kann für Lagerbestände in Stück oder Packungen ermittelt werden.
+Prodané / vypité lahve od minulé inventury|Sold / emptied bottles since last inventory|Seit der letzten Inventur verkaufte / geleerte Flaschen
+NÁPOJ|DRINK|GETRÄNK
+VELIKOST LAHVE|BOTTLE SIZE|FLASCHENGRÖSSE
+POČET VYPITÝCH LAHVÍ|EMPTIED BOTTLES|GELEERTE FLASCHEN
+Upravit přehled|Edit summary|Übersicht bearbeiten
+Zavřít úpravy|Close editing|Bearbeitung schließen
+Upravit před uložením|Edit before saving|Vor dem Speichern bearbeiten
+Obsah této lahve v ml|Contents of this bottle in ml|Inhalt dieser Flasche in ml
+Důvod úpravy měření|Reason for measurement correction|Grund der Messkorrektur
+Přepočítat a zkontrolovat přehled|Recalculate and review summary|Neu berechnen und Übersicht prüfen
+Sudy a další naměřené položky|Kegs and other measured items|Fässer und weitere gemessene Artikel
+Potvrzením uložíte přehled. Všechny lahve s 0 ml se archivují společně s inventurou a zmizí z aktivního provozu.|Confirm to save the summary. All 0 ml bottles will be archived with the inventory and removed from active use.|Bestätigen Sie zum Speichern der Übersicht. Alle Flaschen mit 0 ml werden mit der Inventur archiviert und aus dem aktiven Betrieb entfernt.
+Potvrdit a uložit inventuru|Confirm and save inventory|Inventur bestätigen und speichern
+Potvrdit a odeslat ke schválení|Confirm and submit for approval|Bestätigen und zur Freigabe senden
+Uložený přehled lahví|Saved bottle summary|Gespeicherte Flaschenübersicht
+Archivované prázdné lahve|Archived empty bottles|Archivierte leere Flaschen
+NAČATÝCH|OPENED|ANGEBROCHEN
+PRÁZDNÝCH|EMPTY|LEER
+Zvážený sud|Weighed keg|Gewogenes Fass
+Běžné měření obsahu|Regular contents measurement|Normale Inhaltsmessung
+Měřím plný sud|Weighing a full keg|Volles Fass wiegen
+Měřím prázdný sud|Weighing an empty keg|Leeres Fass wiegen
 Provoz je archivovaný|Venue archived|Betrieb archiviert
 Přístup je vypnutý. Data a historie zůstávají zachovány. Pro obnovení se obraťte na majitele.|Access is disabled. Data and history are preserved. Contact the owner to restore access.|Der Zugriff ist deaktiviert. Daten und Verlauf bleiben erhalten. Wenden Sie sich zur Wiederherstellung an den Inhaber.
 Přejít do panelu majitele|Go to owner panel|Zum Inhaberbereich
@@ -1247,6 +1322,11 @@ Tento PIN už v pracovním prostoru používá jiný zaměstnanec.|Another emplo
   if(source===source.toLocaleUpperCase('cs')){const upper=lowercase.get(source.toLocaleLowerCase('cs'));if(upper)return upper[index].toLocaleUpperCase(locales[language])}
   // Dynamic copy has stable Czech fragments separated from user data by punctuation or digits.
   const replacements=[
+   [/^([\d., \u00a0]+) lahví celkem$/,'$1 bottles in total','$1 Flaschen insgesamt'],
+   [/^([\d., \u00a0]+) plných$/,'$1 full','$1 voll'],
+   [/^([\d., \u00a0]+) načatých$/,'$1 opened','$1 angebrochen'],
+   [/^([\d., \u00a0]+) prázdných$/,'$1 empty','$1 leer'],
+   [/^([\d., \u00a0]+) lahví$/,'$1 bottles','$1 Flaschen'],
    [/^Nové heslo musí mít (\d+)–128 znaků\.$/,'The new password must contain $1–128 characters.','Das neue Passwort muss $1–128 Zeichen enthalten.'],
    [/^Množství v (.+)$/,'Quantity in $1','Menge in $1'],
    [/^Po zápisu: (.+)$/,'After entry: $1','Nach Erfassung: $1'],

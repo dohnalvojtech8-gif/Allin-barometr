@@ -1,5 +1,8 @@
 const assert=require('node:assert/strict');global.window={};require('../server/web/reference.js');const calc=window.BarometrWeight,ref=window.BarometrReference;
 assert.equal(calc({gross:42,tare:7,full:77,capacity:50,density:1,unitWeight:0,unit:'l'}).qty,25);
+assert.equal(calc({gross:42,tare:7,full:77,capacity:50,density:1,unitWeight:0,unit:'ml'}).qty,25000);
+assert.throws(()=>calc({gross:78,tare:7,full:77,capacity:50,density:1,unitWeight:0,unit:'ml'}));
+assert.equal(calc({gross:7,tare:7,full:77,capacity:50,density:1,unitWeight:0,unit:'ks'}).qty,0);
 assert.equal(calc({gross:7,tare:7,full:77,capacity:50,density:1,unitWeight:0,unit:'l'}).qty,0);
 assert.equal(calc({gross:77,tare:7,full:77,capacity:50,density:1,unitWeight:0,unit:'l'}).qty,50);
 assert.throws(()=>calc({gross:78,tare:7,full:77,capacity:50,density:1,unitWeight:0,unit:'l'}));
