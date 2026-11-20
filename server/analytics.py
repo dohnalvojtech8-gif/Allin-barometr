@@ -51,6 +51,7 @@ def observations(document):
     # Mapped weighted lines are already in warehouse counts; do not count them twice.
     for run in document.get('barInventories',[]):
         for index,item in enumerate(run.get('items',[])):
+            if item.get('source')=='stock_snapshot':continue
             if item.get('product') and item.get('store'):continue
             unit,qty=canonical(item['unit'],item['qty']);expected=item.get('expected')
             if expected is not None:_,expected=canonical(item['unit'],expected)
