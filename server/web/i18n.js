@@ -6,6 +6,83 @@ window.NoiraI18n=(()=>{
  const dictionary=new Map(),lowercase=new Map(),textSources=new WeakMap(),attributeSources=new WeakMap();
  function add(source,en,de){dictionary.set(source,[source,en,de]);lowercase.set(source.toLocaleLowerCase('cs'),[source,en,de])}
  const copy=`
+Otevřeno|Open|Geöffnet
+Doba nenastavena|Hours not set|Öffnungszeiten nicht festgelegt
+Dnešní otevírací doba|Today’s opening hours|Heutige Öffnungszeiten
+Nonstop|24 hours|Rund um die Uhr
+přes půlnoc|overnight|über Mitternacht
+Provozy a jejich barvy|Venues and their colours|Betriebe und ihre Farben
+Dnes|Today|Heute
+Pondělí|Monday|Montag
+Úterý|Tuesday|Dienstag
+Středa|Wednesday|Mittwoch
+Čtvrtek|Thursday|Donnerstag
+Pátek|Friday|Freitag
+Sobota|Saturday|Samstag
+Neděle|Sunday|Sonntag
+Historie dodávek|Delivery history|Lieferhistorie
+Dodávky|Deliveries|Lieferungen
+Jeden provoz nebo všechny dodávky v jednom barevně rozlišeném seznamu.|One venue or all deliveries in one colour-coded list.|Ein Betrieb oder alle Lieferungen in einer farblich gekennzeichneten Liste.
+Každá dodávka včetně položek, skladů, příjemce a faktury.|Every delivery with its items, warehouses, recipient and invoice.|Jede Lieferung mit Artikeln, Lagern, Empfänger und Rechnung.
+Načítání dodávek…|Loading deliveries…|Lieferungen werden geladen…
+Dodávky kterého provozu chcete zobrazit?|Which venue's deliveries would you like to see?|Lieferungen welches Betriebs möchten Sie sehen?
+Všechny provozy společně|All venues together|Alle Betriebe gemeinsam
+Vybrat provoz|Choose venue|Betrieb wählen
+Barvy provozů|Venue colours|Betriebsfarben
+Barvy dodávek jednotlivých provozů|Delivery colours by venue|Lieferfarben nach Betrieb
+Název provozu zůstává viditelný i vedle jeho barvy.|The venue name stays visible alongside its colour.|Der Betriebsname bleibt neben seiner Farbe sichtbar.
+Vyhledat dodávku|Find a delivery|Lieferung suchen
+Dodavatel, doklad, produkt…|Supplier, document, product…|Lieferant, Beleg, Produkt…
+Další filtry|More filters|Weitere Filter
+Všichni příjemci|All recipients|Alle Empfänger
+Všichni dodavatelé|All suppliers|Alle Lieferanten
+Zobrazit dodávky|Show deliveries|Lieferungen anzeigen
+Zrušit filtry|Clear filters|Filter zurücksetzen
+Dodávka bez uvedeného dodavatele|Delivery without supplier details|Lieferung ohne Lieferantenangabe
+Doklad neuveden|No document reference|Kein Beleg angegeben
+Žádné dodávky neodpovídají filtrům.|No deliveries match these filters.|Keine Lieferungen entsprechen den Filtern.
+Další dodávky →|More deliveries →|Weitere Lieferungen →
+CELÁ DODÁVKA|COMPLETE DELIVERY|GESAMTE LIEFERUNG
+Detail dodávky|Delivery details|Lieferdetails
+Položky, rozdělení do skladů a přiložené doklady.|Items, warehouse allocations and attached documents.|Artikel, Lagerzuordnung und beigefügte Belege.
+Načítání dodávky…|Loading delivery…|Lieferung wird geladen…
+Doklad|Document|Beleg
+Přijal|Received by|Angenommen von
+Faktura a přílohy|Invoice and attachments|Rechnung und Anhänge
+Fotografie faktury|Invoice photo|Rechnungsfoto
+Fotografie faktury zatím není přiložená.|No invoice photo attached yet.|Noch kein Rechnungsfoto beigefügt.
+Vyfotit fakturu|Photograph invoice|Rechnung fotografieren
+Vybrat fotografie|Choose photos|Fotos auswählen
+Volitelné · nejvýše 6 fotografií|Optional · up to 6 photos|Optional · bis zu 6 Fotos
+Všechny změny dodávky|All delivery changes|Alle Lieferänderungen
+Příjem dodávky|Delivery received|Lieferung angenommen
+Fotografie faktury přidána|Invoice photo added|Rechnungsfoto hinzugefügt
+Fotografie faktury uložena.|Invoice photo saved.|Rechnungsfoto gespeichert.
+JEDNA DODÁVKA · VÍCE SKLADŮ|ONE DELIVERY · MULTIPLE WAREHOUSES|EINE LIEFERUNG · MEHRERE LAGER
+Vyplňte zboží, rozdělte ho do skladů a potvrďte celou dodávku jednou.|Enter the goods, allocate warehouses and confirm the whole delivery once.|Waren eingeben, auf Lager verteilen und die gesamte Lieferung einmal bestätigen.
+Poznámka a fotografie faktury|Note and invoice photos|Notiz und Rechnungsfotos
+Najít produkt|Find a product|Produkt suchen
+Ve skladu|In the warehouse|Im Lager
+Přijmout|Receive|Annehmen
+Zadat po baleních|Enter by packs|Nach Packungen eingeben
+Počet balení|Number of packs|Anzahl der Packungen
+Jednotek v balení|Units per pack|Einheiten je Packung
+Zboží do dalšího skladu|Goods for another warehouse|Waren für ein weiteres Lager
+Vyberte další sklad|Choose another warehouse|Weiteres Lager wählen
+Přidat sklad do dodávky|Add warehouse to delivery|Lager zur Lieferung hinzufügen
+Zkontrolovat celou dodávku|Review complete delivery|Gesamte Lieferung prüfen
+Kontrola celé dodávky|Review complete delivery|Gesamte Lieferung prüfen
+Potvrdit a přijmout celou dodávku|Confirm and receive complete delivery|Gesamte Lieferung bestätigen und annehmen
+Celá dodávka byla přijata.|The complete delivery was received.|Die gesamte Lieferung wurde angenommen.
+Na bar|To bar|Zur Bar
+Přesun lahví na bar|Transfer bottles to bar|Flaschen zur Bar verschieben
+Počet lahví|Number of bottles|Anzahl der Flaschen
+Ve skladu po přesunu|Warehouse stock after transfer|Lagerbestand nach der Verschiebung
+Na bar přibude|Added to the bar|Zur Bar hinzugefügt
+Přesunout na bar|Transfer to bar|Zur Bar verschieben
+Lahve přesunuty ze skladu na bar.|Bottles transferred from warehouse to bar.|Flaschen vom Lager zur Bar verschoben.
+Přesun na bar|Transfer to bar|Verschiebung zur Bar
+Prohlížet historii dodávek a faktury|View delivery history and invoices|Lieferhistorie und Rechnungen ansehen
 Centrální rozhraní majitele|Central owner interface|Zentraler Inhaberbereich
 Zatím nemáte uložené sudy.|No saved kegs yet.|Noch keine gespeicherten Fässer.
 Kategorie produktů|Product categories|Produktkategorien
@@ -1322,6 +1399,11 @@ Tento PIN už v pracovním prostoru používá jiný zaměstnanec.|Another emplo
   if(source===source.toLocaleUpperCase('cs')){const upper=lowercase.get(source.toLocaleLowerCase('cs'));if(upper)return upper[index].toLocaleUpperCase(locales[language])}
   // Dynamic copy has stable Czech fragments separated from user data by punctuation or digits.
   const replacements=[
+   [/^Otevřeno od včerejška do ([0-9:]+)$/,'Open since yesterday until $1','Seit gestern bis $1 geöffnet'],
+   [/^(\d+) dodávek$/,'$1 deliveries','$1 Lieferungen'],
+   [/^(\d+) fotografií faktury$/,'$1 invoice photos','$1 Rechnungsfotos'],
+   [/^(\d+) příloh$/,'$1 attachments','$1 Anhänge'],
+   [/^(\d+) položek · (\d+) skladů$/,'$1 items · $2 warehouses','$1 Artikel · $2 Lager'],
    [/^([\d., \u00a0]+) lahví celkem$/,'$1 bottles in total','$1 Flaschen insgesamt'],
    [/^([\d., \u00a0]+) plných$/,'$1 full','$1 voll'],
    [/^([\d., \u00a0]+) načatých$/,'$1 opened','$1 angebrochen'],

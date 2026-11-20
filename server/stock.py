@@ -58,7 +58,7 @@ def validate_stock(data):
     for kind,seen in [('counts',count_ids),('moves',move_ids)]:
         for row in data[kind]:
             if not isinstance(row,dict) or not text(row.get('id'),100) or row['id'] in seen or row.get('store') not in stores or row.get('product') not in products or not date(row.get('at')):raise StockValidationError('Neplatný skladový záznam.')
-            if kind=='counts' and any(p['id']==row['product'] and p.get('catalogProductId') and p['unit'] in ('ks','balení') for p in data['products']) and type(row.get('qty')) in (int,float) and not float(row['qty']).is_integer():raise StockValidationError('Počet skladových lahví nebo balení musí být celé číslo.')
+            if kind=='counts' and any(p['id']==row['product'] and not whole_bottles(p,row.get('qty')) for p in data['products']):raise StockValidationError('Počet skladových lahví musí být celé číslo.')
             seen.add(row['id'])
             if row.get('inventoryId') is not None and not text(row['inventoryId'],100):raise StockValidationError('Neplatné ID inventury.')
             if row.get('kind','warehouse') not in ('warehouse','bar'):raise StockValidationError('Neplatný typ inventury.')
@@ -219,3 +219,11 @@ def low_stock(document):
             quantity=current_quantity(document,product['id'],store['id'])
             if at_minimum(product,quantity):rows.append({'productId':product['id'],'productName':product['name'],'storeId':store['id'],'storeName':store['name'],'quantity':quantity,'minimum':product.get('min',0),'unit':product['unit']})
     return rows
+
+
+def whole_bottles(product,quantity):
+    if not product.get('catalogProductId') or product['unit'] not in ('ks','balení'):return True
+    if type(quantity) not in (int,float) or not math.isfinite(quantity):return False
+    pack=product.get('packSize',1) if product['unit']=='balení' else 1
+    number=quantity*pack
+    return pack>0 and float(pack).is_integer() and abs(number-round(number))<1e-8

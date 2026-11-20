@@ -67,7 +67,7 @@ def summarize(items,depletions):
 
 def prepare_run(c,document,run,user,include_live=True):
     from server.app import one,allrows,uid,ApiError,PRODUCTS,has_permission
-    from server.stock import current_quantity
+    from server.stock import current_quantity,whole_bottles
     owner=user.get('stock_owner_id') or user['id'];run=copy.deepcopy(run)
     run['items']=[item for item in run['items'] if item.get('source')!='stock_snapshot']
     user_row=one(c,'SELECT state_json FROM users WHERE id=%s',(state_user(user),));state=json.loads(user_row['state_json']) if user_row else {}
@@ -114,7 +114,7 @@ def prepare_run(c,document,run,user,include_live=True):
         if p['id'] in overrides:
             if not has_permission(user,'inventory.warehouse') or not has_permission(user,'inventory.run'):raise ApiError('Nemáte oprávnění upravovat skladovou inventuru.',403)
             if type(quantity) not in (int,float) or not math.isfinite(quantity) or not 0<=quantity<=1e12:raise ApiError('Zadejte nezáporné množství ve skladu.')
-            if p['unit'] in ('ks','balení') and not float(quantity).is_integer():raise ApiError('Počet skladových lahví nebo balení musí být celé číslo.')
+            if not whole_bottles(p,quantity):raise ApiError('Počet skladových lahví nebo balení musí být celé číslo.')
             if quantity!=current:counts.append({'id':uid(),'inventoryId':run['id'],'store':p['store'],'product':p['id'],'kind':'warehouse','qty':quantity,'at':run['at'],'method':'Kontrola skladových lahví při inventuře baru'})
         run['items'].append({'id':'stock:'+p['id'],'source':'stock_snapshot','stockProductId':p['id'],'store':p['store'],'catalogProductId':p['catalogProductId'],'bottleMl':p['catalogCapacityMl'],'name':p['name'],'qty':quantity if quantity is not None else 0,'known':quantity is not None,'unit':p['unit'],'packSize':p.get('packSize',1),'expected':None,'cost':0})
     run['bottleSummary']=summarize(run['items'],events+projected)
@@ -188,7 +188,7 @@ def restore_corrections(c,owner,author,content,reason):
             if matched and matched['qty']!=item['qty']:raise ApiError('Počet skladových lahví a souhrn se musí shodovat.')
             if item['qty']!=old_items.get(item['id'],{}).get('qty'):
                 if not has_permission(g.user,'inventory.warehouse'):raise ApiError('Nemáte oprávnění opravovat počty ve skladu.',403)
-                if item['unit'] in ('ks','balení') and not float(item['qty']).is_integer():raise ApiError('Počet lahví musí být celé číslo.')
+                if item['unit'] in ('ks','balení') and abs(item['qty']*(item.get('packSize',1) if item['unit']=='balení' else 1)-round(item['qty']*(item.get('packSize',1) if item['unit']=='balení' else 1)))>1e-8:raise ApiError('Počet lahví musí být celé číslo.')
                 if not matched:content['counts'].append({'id':uid(),'inventoryId':run['id'],'product':item['stockProductId'],'store':item['store'],'qty':item['qty'],'at':run['at'],'kind':'warehouse','actorId':author,'actorName':g.user['first_name']+' '+g.user['last_name'],'recordedAt':time.time(),'method':'Oprava počtu skladových lahví'})
         templates={entry['bottle']['id']:entry['bottle'] for entry in run.get('archivedEmptyBottles',[]) if entry['userId']==author}
         account=one(c,'SELECT * FROM users WHERE id=%s AND (id=%s OR stock_owner_id=%s)',(author,owner,owner))

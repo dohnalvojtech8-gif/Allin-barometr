@@ -54,6 +54,17 @@ def within_hours(stamp,hours):
         if start==end or (start<end and start<=minute<end) or (start>end and minute>=start):return True
     return not previous['closed'] and previous['open']>previous['close'] and minute<previous['close']
 
+def opening_status(hours,stamp=None):
+    """Current venue-local day, including yesterday's shift after midnight."""
+    stamp=time.time() if stamp is None else stamp
+    zone=hours.get('timezone','Europe/Prague');local=datetime.fromtimestamp(stamp,ZoneInfo(zone))
+    result={'configured':bool(hours.get('days')),'isOpen':within_hours(stamp,hours),'day':local.weekday(),'date':local.date().isoformat(),'timezone':zone,'checkedAt':stamp}
+    if not result['configured']:return result
+    today=hours['days'][str(local.weekday())];previous=hours['days'][str((local.weekday()-1)%7)]
+    result.update(today=today,continuesFromYesterday=not previous['closed'] and previous['open']>previous['close'] and local.strftime('%H:%M')<previous['close'])
+    if result['continuesFromYesterday']:result['previousClose']=previous['close']
+    return result
+
 def detect(document,hours=None,limits=None,now=None,corrections=()):
     limits=validate_limits(limits or {});now=time.time() if now is None else now;cutoff=now-30*86400
     products={p['id']:p for p in document.get('products',[])};stores={s['id']:s for s in document.get('stores',[])}

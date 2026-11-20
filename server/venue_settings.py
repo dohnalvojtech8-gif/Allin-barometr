@@ -6,7 +6,7 @@ from pathlib import Path
 from flask import g,jsonify
 from server.coowners import owner_scope
 
-CARD_DEFAULTS={'style':'classic','font':'system','titleSize':25,'textSize':14,'textColor':'#f7f0e4','mutedColor':'#bdb4a4','background':'#1d2023','accent':'#d8bd87','radius':16,'shadow':False,'bold':False,'italic':False}
+CARD_DEFAULTS={'style':'classic','font':'system','titleSize':25,'textSize':14,'textColor':'#18283d','mutedColor':'#53657b','background':'#ffffff','accent':'#2563eb','radius':16,'shadow':False,'bold':False,'italic':False}
 CARD_STYLES=('classic','clean','stripe','banner','editorial','compact','gradient','minimal','ledger','columns','outline','square')
 
 def card_style(values):

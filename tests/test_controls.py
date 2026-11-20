@@ -55,6 +55,28 @@ def test_opening_hours_handles_midnight_closed_days_and_validation():
   with pytest.raises(ValueError):validate_limits(bad)
 
 
+def test_opening_status_uses_current_local_day_and_overnight_shift():
+ from server.controls import opening_status
+ schedule=hours();schedule['days']['0']={'closed':False,'open':'20:00','close':'02:00'};schedule=validate_hours(schedule)
+ before=datetime.fromisoformat('2026-11-17T00:30:00+00:00').timestamp()
+ status=opening_status(schedule,before)
+ assert status['date']=='2026-11-17' and status['day']==1 and status['isOpen']
+ assert status['today']['closed'] and status['continuesFromYesterday'] and status['previousClose']=='02:00'
+ closed=opening_status(schedule,datetime.fromisoformat('2026-11-17T02:00:00+01:00').timestamp())
+ assert closed['isOpen'] is False and not closed['continuesFromYesterday']
+ assert opening_status({},before)['isOpen'] is None
+ schedule['days']['1']={'closed':False,'open':'00:00','close':'00:00'}
+ assert opening_status(schedule,before)['isOpen']
+
+
+def test_opening_status_endpoints_are_private_and_venue_specific(hub):
+ client,h,_=hub;vid=create(hub,'Otevírací stav');prefix,vh=enter(hub,vid)
+ assert client.put('/api/owner/venues/'+vid+'/controls',json={'openingHours':hours()},headers=h).status_code==200
+ status=client.get(prefix+'/api/venue/opening-status');assert status.status_code==200 and status.json['status']['configured']
+ all_status=client.get('/api/owner/opening-status');assert all_status.status_code==200 and [v['id'] for v in all_status.json['venues']]==[vid]
+ assert app.test_client().get(prefix+'/api/venue/opening-status').status_code==401
+
+
 def test_owner_controls_low_stock_and_case_resolution_is_scoped(hub):
  client,headers,_=hub;vid=create(hub,'Kontrolovaný bar');prefix,vh=enter(hub,vid);data=document()
  assert save(client,prefix,vh,data).status_code==200

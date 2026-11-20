@@ -94,6 +94,8 @@ def register(app):
         return first,last
 
     def summary(venue):
+        from server.controls import opening_status
+        venue={**venue,'openingStatus':opening_status(json.loads(venue.get('opening_hours_json') or '{}'))}
         with venue_context(venue),db() as c:
             row=one(c,'SELECT data_json FROM stock_documents WHERE user_id=%s',(venue['owner_id'],))
             data=json.loads(row['data_json']) if row else {'stores':[],'products':[],'counts':[],'moves':[],'barInventories':[]}
