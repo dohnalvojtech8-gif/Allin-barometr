@@ -127,6 +127,16 @@ def prepare_new_runs(c,before,after,user):
             prepared,counts=prepare_run(c,before,run,user);after['barInventories'][index]=prepared;after['counts'].extend(counts)
     return after
 
+def refresh_history(c,before,after,owner):
+    """Keep derived bottle totals consistent when the owner corrects a closed run."""
+    from server.app import allrows
+    previous={r['id']:r for r in before.get('barInventories',[])}
+    for run in after.get('barInventories',[]):
+        old=previous.get(run['id'])
+        if old and 'bottleSummary' in old and old!=run:
+            events=allrows(c,'SELECT * FROM bar_bottle_depletions WHERE owner_id=%s AND reported_inventory_id=%s AND voided_at IS NULL',(owner,run['id']))
+            run['bottleSummary']=summarize(run['items'],events)
+
 def archive_runs(c,before,after,user):
     from server.app import execute,one,allrows,ApiError,audit
     previous={r['id'] for r in before.get('barInventories',[])};owner=user.get('stock_owner_id') or user['id']

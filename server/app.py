@@ -642,7 +642,7 @@ def stock_document():
         try:clean=validate_stock(clean)
         except StockValidationError as e:raise ApiError(str(e))
         from server.stock_products import validate_links,save_keg_reading
-        from server.bar_stock import prepare_new_runs,archive_runs
+        from server.bar_stock import prepare_new_runs,archive_runs,refresh_history
         validate_links(c,old,clean,owner_id)
         clean=prepare_new_runs(c,old,clean,g.user)
         try:clean=validate_stock(clean)
@@ -654,6 +654,7 @@ def stock_document():
         clean=prepare_counts(old,attribute_records(old,clean,g.user))
         from server.reviews import stage,protect_closed,event as review_event
         corrected=protect_closed(old,clean,data.get('correctionReason'))
+        refresh_history(c,old,clean,owner_id)
         archive_runs(c,old,clean,g.user)
         if data.get('kegMeasurement') is not None:save_keg_reading(c,clean,owner_id,data['kegMeasurement'])
         clean=stage(c,old,clean,owner_id)

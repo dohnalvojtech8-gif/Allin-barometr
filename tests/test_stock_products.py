@@ -203,3 +203,13 @@ def test_coowner_archives_shared_bar_with_own_audit_identity(hub):
  with app.test_request_context(),venue_context(v),db() as c:
   event=one(c,'SELECT * FROM bar_bottle_depletions');assert event['user_id']==hub[2] and event['actor_name']=='Jana Spolumajitelka'
   assert one(c,"SELECT user_id FROM events WHERE action='empty_bottles_archived'")['user_id']==actor
+
+
+def test_owner_historical_correction_recalculates_bottle_summary(hub):
+ client,venue,prefix,h,p=prepare_liquor(hub);rows=[bottle()];state(client,prefix,h,rows)
+ assert close(client,prefix,h,bar_run(rows)).status_code==200
+ current=client.get(prefix+'/api/stock').json;run=current['data']['barInventories'][-1];run['items'][0]['qty']=250
+ corrected=client.put(prefix+'/api/stock',json={**current,'correctionReason':'Oprava chybně zapsaného původního měření'},headers=h)
+ assert corrected.status_code==200,corrected.json
+ assert corrected.json['data']['barInventories'][-1]['bottleSummary'][0]['totalMl']==2750
+ assert current_quantity(corrected.json['data'],p['id'],'main')==5
