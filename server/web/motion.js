@@ -3,7 +3,7 @@
    dialogs 7, confirmation 8, forms 10; loading percentages removed. */
 window.NoiraMotion=(()=>{
  const reduced=matchMedia('(prefers-reduced-motion: reduce)'),running=new WeakMap(),submissions=new WeakMap();
- let lastSubmission=null,selectedVenue='';
+ let lastSubmission=null;
  const t=value=>window.NoiraI18n?.t(value)||value;
  function animate(node,frames,duration=240){
   if(!node?.isConnected||reduced.matches||!node.animate)return;
@@ -47,10 +47,6 @@ window.NoiraMotion=(()=>{
   };
  }
  function swap(node,html){if(!node)return;node.innerHTML=html;animate(node,[{opacity:0},{opacity:1}],200)}
- function highlight(card){if(!card)return;selectedVenue=card.dataset.venueId||'';
-  document.querySelectorAll('.venue-card').forEach(c=>c.classList.toggle('motion-selected',c===card));
-  animate(card,[{backgroundColor:'var(--panel, #1d2023)'},{backgroundColor:'#343025'},{backgroundColor:'#28261f'}],360);
- }
  function dialog(node){animate(node,[{opacity:0,clipPath:'inset(44% 44% round 14px)'},{opacity:1,clipPath:'inset(0% 0% round 14px)'}],260)}
  function reveal(node){
   if(!node?.isConnected)return;
@@ -73,19 +69,20 @@ window.NoiraMotion=(()=>{
   for(const node of find('.modal-content,.overlay .sheet,.overlay .work-sheet,dialog[open]'))dialog(node);
   for(const container of find('[data-motion-contacts]'))optionalFields(container);
   if(root.closest('form')&&!root.closest('[data-motion-contacts]')){if(root.matches('label,[data-login-venue]'))reveal(root)}
-  for(const card of find('.venue-card'))if(card.dataset.venueId===selectedVenue&&selectedVenue)card.classList.add('motion-selected');
  }
  function start(){
   document.addEventListener('submit',beginSubmission,true);
-  document.addEventListener('click',event=>highlight(event.target.closest('.venue-card')));
-  document.addEventListener('focusin',event=>{const card=event.target.closest('.venue-card');if(card)highlight(card)});
+  document.addEventListener('click',event=>{
+   const button=event.target.closest('button.venue-open-button[data-enter]');
+   if(button&&!button.disabled)animate(button,[{transform:'scale(1)'},{transform:'scale(.95)',offset:.35},{transform:'scale(1)'}],210);
+  },true);
   document.addEventListener('toggle',event=>{if(event.target.matches('dialog[open]'))dialog(event.target)},true);
   new MutationObserver(records=>{for(const record of records){
    if(record.target instanceof Element&&record.target.matches('#work-root')&&record.addedNodes.length)animate(record.target,[{opacity:0},{opacity:1}],200);
    for(const node of record.addedNodes)inspect(node);
   }}).observe(document.body,{childList:true,subtree:true});
   inspect(document.body);
-  reduced.addEventListener('change',()=>{if(reduced.matches)for(const node of document.querySelectorAll('main,.modal-content,.venue-card')){running.get(node)?.cancel()}});
+  reduced.addEventListener('change',()=>{if(reduced.matches)for(const node of document.querySelectorAll('main,.modal-content,.venue-open-button')){running.get(node)?.cancel()}});
  }
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
  return {request,swap,reveal,dialog};
