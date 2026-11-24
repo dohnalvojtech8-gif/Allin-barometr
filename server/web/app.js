@@ -25,7 +25,6 @@ const inventory=window.BarometrInventory.create({products,getState:()=>state,set
 const shop=window.BarometrShop.create({api:auth.api,send:auth.send,products,onUnlock:ids=>{ids.forEach(id=>{state.unlocks[id]={reason:'free-bundle',paid:0,at:Date.now()};});render();},toast});
 const calibration=window.BarometrCalibration.create({api:auth.api,send:auth.send,toast});
 const stock=await window.BarometrStock.create({api:auth.api,send:auth.send,render,navigate:goto,toast,top:head,fmt,getState:()=>state,products,can});
-const mobileItems=[];
 function navIcon(name){const paths={home:'<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>',bottles:'<path d="M7 3h4v4l2 3v10a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V10l2-3zM16 8h3v4l2 2v6a1 1 0 0 1-1 1h-4M5 13h8"/>',period:'<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v4m10-4v4M3 11h18m-13 5h3m3 0h2"/>',history:'<path d="M3 11a9 9 0 1 1 2 7M3 5v6h6m3-5v6l4 2"/>',catalog:'<path d="m3 8 2-5h14l2 5v3a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0zm2 6v7h14v-7M10 21v-6h4v6"/>',settings:'<path d="m9 3-1 3-3 1-2 4 2 3v4l4 2 3-1 3 1 4-2v-4l2-3-2-4-3-1-1-3z"/><circle cx="12" cy="12" r="3"/>',profile:'<circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/>',scan:'<path d="M8 3H4a1 1 0 0 0-1 1v4m13-5h4a1 1 0 0 1 1 1v4M3 16v4a1 1 0 0 0 1 1h4m8 0h4a1 1 0 0 0 1-1v-4M7 12h10m-5-5v10"/>',users:'<circle cx="9" cy="8" r="3"/><path d="M2 21v-3a7 7 0 0 1 14 0v3m1-16a3 3 0 0 1 0 6m2 4a6 6 0 0 1 3 5"/>'};return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]||paths.home}</svg>`;}
 function updateRail(){const rail=$('#section-tabs');$('#rail-prev').disabled=rail.scrollLeft<2;$('#rail-next').disabled=rail.scrollLeft+rail.clientWidth>=rail.scrollWidth-2;}
 const menuGroups=[
@@ -38,14 +37,28 @@ const permissionFor={reviews:'inventory.inbox',period:'inventory.bar',stockhome:
 for(const group of menuGroups){group.items=group.items.filter(item=>!permissionFor[item[0]]||can(permissionFor[item[0]]));if(permissionFor[group.route]&&!can(permissionFor[group.route])&&group.items.length)group.route=group.items[0][0]}
 for(let i=menuGroups.length-1;i>=0;i--)if(!menuGroups[i].items.length)menuGroups.splice(i,1);
 
+const mobileItems=[
+ ['overview','home','Ovládací panel'],
+ ...(can('stock.view')?[['warehouses','catalog','Sklady']]:[]),
+ ...(can('inventory.bar')?[['inventory','scan','Scan baru']]:[]),
+ ...(menuGroups.some(group=>group.route==='inventories')?[['inventories','period','Inventury']]:[]),
+ ['settings','settings','Nastavení']
+];
+window.NoiraI18n?.add('Ovládací panel','Dashboard','Übersicht');
+window.NoiraI18n?.add('Scan baru','Bar scan','Bar-Scan');
+window.NoiraI18n?.add('Mobilní ovládací panel','Mobile navigation','Mobile Navigation');
+
 let drawerOpen=false;
-function setDrawer(open){const sidebar=$('#sidebar'),mobile=matchMedia('(max-width:760px)').matches;drawerOpen=open&&mobile;document.body.classList.toggle('drawer-open',drawerOpen);$('#menu-toggle').setAttribute('aria-expanded',String(drawerOpen));$('#sidebar-backdrop').hidden=!drawerOpen;sidebar.inert=mobile&&!drawerOpen;sidebar.setAttribute('aria-hidden',String(mobile&&!drawerOpen));$('.shell').inert=drawerOpen;if(drawerOpen){requestAnimationFrame(()=>$('#sidebar-close').focus())}else if(mobile)$('#menu-toggle').focus({preventScroll:true});}
+function setDrawer(open){const sidebar=$('#sidebar'),mobile=matchMedia('(max-width:760px)').matches;drawerOpen=open&&mobile;document.body.classList.toggle('drawer-open',drawerOpen);$('#menu-toggle').setAttribute('aria-expanded',String(drawerOpen));$('#sidebar-backdrop').hidden=!drawerOpen;sidebar.inert=mobile&&!drawerOpen;sidebar.setAttribute('aria-hidden',String(mobile&&!drawerOpen));$('.shell').inert=drawerOpen;$('#mobile-nav').inert=drawerOpen;if(drawerOpen){requestAnimationFrame(()=>$('#sidebar-close').focus())}else if(mobile)$('#menu-toggle').focus({preventScroll:true});}
 $('#menu-toggle').onclick=()=>setDrawer(!drawerOpen);$('#sidebar-close').onclick=()=>setDrawer(false);$('#sidebar-backdrop').onclick=()=>setDrawer(false);$('#sidebar').addEventListener('click',e=>{if(e.target.closest('a'))setDrawer(false)});window.addEventListener('resize',()=>setDrawer(drawerOpen));setDrawer(false);
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&drawerOpen)setDrawer(false);if(e.key==='Tab'&&drawerOpen){const els=[...$('#sidebar').querySelectorAll('button,a,summary,select,input,[tabindex="0"]')].filter(x=>x.getClientRects().length),first=els[0],last=els.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}}});
 window.addEventListener('barometr-start-bottles',()=>inventory.quickStart());
 function renderNavigation(page){
  const section=['detail'].includes(page)?'library':['inventory','period','measure','result','barreview'].includes(page)?'barnew':page==='delivery'?'deliveries':page==='warehouse'||page==='product'?'warehouses':page==='countreview'?'stockcount':page==='audit'?'audits':page;
- const mobileSection=['measure','result'].includes(page)?'inventory':['audits','audit','history','period','stockcount'].includes(page)?'inventories':page;
+ const mobileSection=['inventory','measure','result'].includes(page)?'inventory'
+  :['stockhome','warehouses','warehouse','product','stockproducts','receive','deliveries','delivery','movements','weigh','alcohol','changes'].includes(page)?'warehouses'
+  :['inventories','barnew','barreview','stockcount','countreview','audits','audit','history','period','reports','reviews'].includes(page)?'inventories'
+  :['settings','reference','inventory-order','users','profile'].includes(page)?'settings':page;
  const link=([id,icon,label],active)=>`<a href="#${id}" class="${active?'active':''} ${id==='inventory'?'nav-start':''}" ${id==='inventory'?'data-start-scan="true"':''} ${active?'aria-current="page"':''}>${navIcon(icon)}<span>${label}</span></a>`;
  $('#nav').innerHTML=link(['overview','home','Hlavní strana'],section==='overview')+menuGroups.map(g=>`<details class="nav-group" ${g.items.some(i=>i[0]===section)?'open':''}><summary>${navIcon(g.icon)}<span>${g.name}</span><b>⌄</b></summary>${g.items.map(i=>link(i,i[0]===section)).join('')}</details>`).join('');
  $('#section-tabs').innerHTML=[['overview','home','Hlavní'],...menuGroups.map(g=>[g.route,g.icon,g.name])].map(item=>link(item,item[0]===section||menuGroups.find(g=>g.route===item[0])?.items.some(i=>i[0]===section))).join('');
