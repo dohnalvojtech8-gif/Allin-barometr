@@ -4,8 +4,6 @@ button[data-motion-busy],button[data-motion-success]{display:inline-flex;align-i
 button[data-motion-busy]::before{content:'';display:inline-block;flex:none;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:noira-spin .7s linear infinite}
 button[data-motion-success]::before,.motion-success-icon{content:'';display:inline-block;flex:none;width:14px;height:8px;border:solid currentColor;border-width:0 0 2px 2px;transform:rotate(-45deg);animation:noira-check-in .2s ease-out}
 .motion-success-icon{margin:0 12px 5px 1px;color:#b3d5ba}
-.venue-card{transition:background-color var(--motion-duration) var(--motion-easing)}
-.owner-hub .venue-card.motion-selected{background:#28261f}
 .motion-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 [data-motion-contacts] label[hidden],[data-motion-add-field][hidden]{display:none!important}
 [data-motion-add-field]{grid-column:1/-1;justify-self:start;margin:4px 0 12px}
@@ -22,6 +20,6 @@ button[data-motion-success]::before,.motion-success-icon{content:'';display:inli
 }
 @keyframes noira-backdrop-in{from{opacity:0}to{opacity:1}}
 @media(prefers-reduced-motion:reduce){
- .owner-content,.shell,.venue-card{transition:none!important}
+ .owner-content,.shell{transition:none!important}
  button[data-motion-busy]::before,button[data-motion-success]::before,.motion-success-icon,body.drawer-open #sidebar-backdrop,body.menu-open #owner-backdrop{animation:none!important}
 }
