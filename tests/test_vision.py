@@ -83,3 +83,29 @@ def test_provider_failures_are_sanitized(monkeypatch):
     monkeypatch.setattr(vision, 'urlopen', lambda *a, **kw: BytesIO(b'{"status":"incomplete"}'))
     with pytest.raises(vision.VisionError):
         vision.analyze([IMAGE, IMAGE], PRODUCT, 700)
+
+
+def test_closure_requires_two_clear_agreeing_frames():
+    for closure in ('cap', 'pourer', 'open'):
+        data = result()
+        for frame in data['frames']:
+            frame.update(closure=closure, neck_visible=True)
+        assert vision.validate_result(data, 700)['closure'] == closure
+        data['frames'][1]['neck_visible'] = False
+        assert vision.validate_result(data, 700)['closure'] == 'unknown'
+        data['frames'][1].update(closure='unknown', neck_visible=True)
+        assert vision.validate_result(data, 700)['closure'] == 'unknown'
+
+
+def test_opaque_bottle_routes_to_weight_without_guessing_volume():
+    data = result()
+    for frame in data['frames']:
+        frame.update(opaque=True, closure='pourer', neck_visible=True,
+                     level_visible=False, full_y=None, level_y=None, bottom_y=None)
+    measured = vision.validate_result(data, 700)
+    assert measured['detected'] is False
+    assert measured['nextMethod'] == 'weight'
+    assert measured['closure'] == 'pourer'
+    assert 'ml' not in measured
+    data['frames'][1]['matches_product'] = False
+    assert 'nextMethod' not in vision.validate_result(data, 700)
