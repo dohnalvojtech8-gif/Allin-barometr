@@ -180,3 +180,14 @@ def test_scoped_roundtrip_preserves_shared_product_assignment_and_legacy_store_o
  assert 'store' not in next(p for p in visible['products'] if p['id']=='shared')
  merged=merge_scoped_stock(data,visible,['a'])
  assert merged==data
+
+
+def test_paired_terminal_uses_owner_appearance_when_locked_and_unlocked(terminal):
+ m,h,owner,e,eh,uid,pin,d,perms=terminal
+ assert m.put('/api/appearance',json={'theme':8},headers=h).status_code==200
+ assert d.get('/api/work/session').json['theme']==8
+ wh=pin_login(d,pin)
+ assert isinstance(wh,dict)
+ assert d.get('/api/work/session').json['theme']==8
+ assert m.put('/api/appearance',json={'theme':4},headers=h).status_code==200
+ assert d.get('/api/work/session').json['theme']==4
