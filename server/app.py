@@ -200,7 +200,7 @@ def textfield(data,key,minimum=1,maximum=64):
     return v
 from server.permissions import has_permission, effective_permissions, PERMISSIONS
 
-from server.coowners import owner_scope, valid_owner
+from server.coowners import owner_scope
 
 def workspace_id():
     return owner_scope() if getattr(g,'venue',None) and g.user['role']=='admin' else g.user['id']
@@ -220,9 +220,17 @@ def authenticated(admin=False,bottles=False,permission=None):
                 if getattr(g,'venue',None) and row['role']=='admin':
                     # Owner entry is tied to a live central session on this browser.
                     with db(central=True) as owner_db:
-                        owner_session=one(owner_db,"SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=%s AND s.expires_at>%s AND u.status='active' AND u.role='admin'",(digest(request.cookies.get(COOKIE,'')),time.time()))
-                    if not owner_session or owner_session['id']!=row['id'] or not valid_owner(owner_session,g.venue):raise ApiError('Přihlaste se do centrálního panelu majitele.',401)
-                if row['role']=='admin' and not getattr(g,'venue',None) and not valid_owner(row):raise ApiError('Přístup majitele byl pozastaven.',401)
+                        owner_session=one(owner_db,"""SELECT u.id FROM sessions s
+                            JOIN users u ON u.id=s.user_id
+                            JOIN users root ON root.id=COALESCE(u.stock_owner_id,u.id)
+                            WHERE s.token_hash=%s AND s.expires_at>%s AND u.id=%s
+                            AND u.status='active' AND u.role='admin' AND root.id=%s
+                            AND root.status='active' AND root.role='admin' AND root.stock_owner_id IS NULL""",
+                            (digest(request.cookies.get(COOKIE,'')),time.time(),row['id'],g.venue['owner_id']))
+                    if not owner_session:raise ApiError('Přihlaste se do centrálního panelu majitele.',401)
+                if row['role']=='admin' and not getattr(g,'venue',None) and row.get('stock_owner_id'):
+                    root=one(c,"SELECT id FROM users WHERE id=%s AND role='admin' AND status='active' AND stock_owner_id IS NULL",(row['stock_owner_id'],))
+                    if not root:raise ApiError('Přístup majitele byl pozastaven.',401)
                 if row['role']=='admin' and row.get('stock_owner_id') and getattr(g,'venue',None):
                     shared=one(c,'SELECT state_json FROM users WHERE id=%s',(row['stock_owner_id'],))
                     row['state_json']=shared['state_json']

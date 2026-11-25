@@ -131,9 +131,11 @@ def register(app):
                     if SUPABASE_DATABASE_URL:execute(c,'REVOKE ALL ON '+table+' FROM anon,authenticated')
 
     def owner_id():return g.user.get('stock_owner_id') or g.user['id']
-    def allowed(c,row,review=False):
+    lookup_scope=object()
+
+    def allowed(c,row,review=False,scope=lookup_scope):
         if not row or row['owner_id']!=owner_id():raise ApiError('Inventura neexistuje.',404)
-        scope=store_scope(c,g.user)
+        if scope is lookup_scope:scope=store_scope(c,g.user)
         if scope is not None and not set(json.loads(row['stores_json'])).issubset(scope):raise ApiError('Ke všem skladům inventury nemáte přístup.',403)
         if review:
             if not has_permission(g.user,'inventory.review'):raise ApiError('Nemáte oprávnění schvalovat inventury.',403)
@@ -146,12 +148,15 @@ def register(app):
     @authenticated(permission='stock.view')
     def submissions():
         with db() as c:
-            rows=allrows(c,'SELECT * FROM inventory_submissions WHERE owner_id=%s ORDER BY submitted_at DESC,id',(owner_id(),))
+            ids_only=request.args.get('view')=='ids'
+            fields='id,owner_id,stores_json,submitted_by' if ids_only else '*'
+            rows=allrows(c,'SELECT '+fields+' FROM inventory_submissions WHERE owner_id=%s ORDER BY submitted_at DESC,id',(owner_id(),))
+            scope=store_scope(c,g.user)
             visible=[]
             for row in rows:
-                try:allowed(c,row)
+                try:allowed(c,row,scope=scope)
                 except ApiError:continue
-                visible.append(public(row))
+                visible.append({'id':row['id']} if ids_only else public(row))
         return jsonify(submissions=visible,canReview=has_permission(g.user,'inventory.review'))
 
     @app.get('/api/inventory/submissions/<id>')

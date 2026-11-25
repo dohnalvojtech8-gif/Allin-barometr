@@ -79,7 +79,7 @@ def register(app):
     from server.app import (authenticated,db,execute,one,allrows,ApiError,body,textfield,uid,
         init_db,seed_shop,public_user,session_response,WEB,TEST_DB,COOKIE,SECURE,audit)
     from server.permissions import PERMISSIONS
-    from server.stock import current_quantity,at_minimum,low_stock
+    from server.stock import current_quantities,at_minimum,low_stock
 
     def owned(venue_id):
         with db(central=True) as c:venue=one(c,'SELECT * FROM allin_venues WHERE id=%s AND owner_id=%s',(venue_id,owner_scope()))
@@ -100,21 +100,23 @@ def register(app):
             row=one(c,'SELECT data_json FROM stock_documents WHERE user_id=%s',(venue['owner_id'],))
             data=json.loads(row['data_json']) if row else {'stores':[],'products':[],'counts':[],'moves':[],'barInventories':[]}
             stores=[s for s in data['stores'] if not s.get('archivedAt')]
+            positions=current_quantities(data)
             quantities={};low=0;known=0;unmeasured=0
             for store in stores:
                 from server.work import local_products
                 for product in local_products(data,store['id']):
-                    qty=current_quantity(data,product['id'],store['id'])
+                    qty=positions.get((product['id'],store['id']))
                     if qty is None:unmeasured+=1;continue
                     known+=1;unit=product['unit'];quantities[unit]=quantities.get(unit,0)+qty
                     if at_minimum(product,qty):low+=1
             inventory_ids={r.get('inventoryId') or r['store']+'|'+r['at'] for r in data['counts'] if not r.get('opening')}
             inventory_ids.update(r['id'] for r in data.get('barInventories',[]))
             runs={r['id']:{'at':r['at'],'items':r['items']} for r in data.get('barInventories',[])}
+            bar_ids=set(runs)
             for count in data['counts']:
                 if count.get('opening'):continue
                 key=count.get('inventoryId') or count['store']+'|'+count['at']
-                if key in {r['id'] for r in data.get('barInventories',[])}:continue
+                if key in bar_ids:continue
                 run=runs.setdefault(key,{'at':count['at'],'items':[]})
                 run['items'].append(count)
             latest=max(runs.values(),key=lambda r:r['at'],default=None)
@@ -130,13 +132,15 @@ def register(app):
             last=one(c,'SELECT created_at FROM events ORDER BY created_at DESC LIMIT 1')
             team=one(c,"SELECT COUNT(*) AS n FROM users WHERE role='user'")['n']
             return {**venue,'cardStyle':json.loads(venue.get('card_style_json') or '{}'),'quantities':{unit:round(qty,3) for unit,qty in quantities.items()},'warehouses':len(stores),'products':len(data['products']),
-                'inventories':len(inventory_ids),'belowMinimum':low,'lowStock':low_stock(data),'measuredPositions':known,'unmeasuredPositions':unmeasured,
+                'inventories':len(inventory_ids),'belowMinimum':low,'lowStock':low_stock(data, positions),'measuredPositions':known,'unmeasuredPositions':unmeasured,
                 'latestShortage':shortage,'latestInventoryAt':latest['at'] if latest else None,'employees':team,'lastActivity':last['created_at'] if last else None}
 
     @app.get('/api/owner/venues')
     @authenticated(admin=True)
     def venues():
         with db(central=True) as c:rows=allrows(c,'SELECT * FROM allin_venues WHERE owner_id=%s AND archived_at IS '+('NOT NULL' if request.args.get('archived')=='1' else 'NULL')+' ORDER BY created_at,id',(owner_scope(),))
+        if request.args.get('view') == 'names':
+            return jsonify(venues=[{'id': v['id'], 'name': v['name']} for v in rows])
         return jsonify(venues=[summary(v) for v in rows])
 
     @app.post('/api/owner/venues')

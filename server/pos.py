@@ -121,13 +121,32 @@ def register(app):
     def pos_status():
         with db(central=True) as c:
             venues=allrows(c,'SELECT v.*,p.provider,p.register_label,p.updated_at AS configured_at FROM allin_venues v LEFT JOIN pos_connections p ON p.venue_id=v.id WHERE v.owner_id=%s AND v.archived_at IS NULL ORDER BY v.created_at,v.id',(owner_scope(),))
+            latest_days=allrows(c,"""WITH latest AS (
+                SELECT d.venue_id, MAX(d.business_date) AS business_date FROM pos_days d
+                JOIN allin_venues v ON v.id=d.venue_id WHERE v.owner_id=%s AND v.archived_at IS NULL
+                GROUP BY d.venue_id)
+                SELECT d.venue_id,d.business_date,d.currency,SUM(d.revenue_net) AS revenue_net,
+                    SUM(CASE WHEN d.cogs IS NULL OR d.operating_costs IS NULL THEN 1 ELSE 0 END) AS missing,
+                    SUM(d.revenue_net-d.cogs-d.operating_costs) AS profit,COUNT(*) AS registers
+                FROM pos_days d JOIN latest l ON l.venue_id=d.venue_id AND l.business_date=d.business_date
+                GROUP BY d.venue_id,d.business_date,d.currency ORDER BY d.currency""",(owner_scope(),))
+            imports=allrows(c,"""SELECT * FROM (
+                SELECT i.*,ROW_NUMBER() OVER(PARTITION BY i.venue_id ORDER BY i.created_at DESC,i.id DESC) AS rank_no
+                FROM pos_imports i JOIN allin_venues v ON v.id=i.venue_id
+                WHERE v.owner_id=%s AND v.archived_at IS NULL) ranked WHERE rank_no=1""",(owner_scope(),))
+            last_import={}
+            for item in imports:
+                item.pop('rank_no')
+                last_import[item['venue_id']]=item
+            results={}
+            for day in latest_days:
+                for key in ('revenue_net','missing','registers'):day[key]=int(day[key])
+                day['profit']=None if day['missing'] else int(day['profit'])
+                results.setdefault(day.pop('venue_id'),[]).append(day)
             for v in venues:
-                v['latestResults']=allrows(c,"SELECT business_date,currency,SUM(revenue_net) AS revenue_net,SUM(CASE WHEN cogs IS NULL OR operating_costs IS NULL THEN 1 ELSE 0 END) AS missing,SUM(CASE WHEN cogs IS NOT NULL AND operating_costs IS NOT NULL THEN revenue_net-cogs-operating_costs ELSE 0 END) AS profit,COUNT(*) AS registers FROM pos_days WHERE venue_id=%s AND business_date=(SELECT MAX(business_date) FROM pos_days WHERE venue_id=%s) GROUP BY business_date,currency ORDER BY currency",(v['id'],v['id']))
-                for day in v['latestResults']:
-                    for key in ('revenue_net','missing','profit','registers'):day[key]=int(day[key])
-                    if day['missing']:day['profit']=None
+                v['latestResults']=results.get(v['id'],[])
                 v['latest']=v['latestResults'][0] if v['latestResults'] else None
-                v['lastImport']=one(c,'SELECT * FROM pos_imports WHERE venue_id=%s ORDER BY created_at DESC LIMIT 1',(v['id'],))
+                v['lastImport']=last_import.get(v['id'])
                 v['mode']='csv';v['automaticSync']=False
         return jsonify(providers=PROVIDERS,venues=venues)
 

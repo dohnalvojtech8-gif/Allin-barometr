@@ -101,6 +101,16 @@ def current_quantity(data,pid,sid,at=None):
     if last is None and not moves:return None
     return (last['qty'] if last else 0)+sum(r['qty'] for r in moves)
 
+def current_quantities(document):
+    """Evaluate each product/store history once, preserving count tie ordering."""
+    histories = {}
+    for field in ('counts', 'moves'):
+        for row in document.get(field, []):
+            key = (row['product'], row['store'])
+            histories.setdefault(key, {}).setdefault(field, []).append(row)
+    return {key: current_quantity(history, *key) for key, history in histories.items()}
+
+
 def prepare_counts(before,after):
     previous={r['id']:r for r in before.get('counts',[])}
     products={p['id']:p for p in after['products']}
@@ -210,13 +220,15 @@ def at_minimum(product,quantity):
     return quantity is not None and minimum_enabled(product) and quantity<=product.get('min',0)
 
 
-def low_stock(document):
+def low_stock(document, quantities=None):
     from server.work import local_products
+    if quantities is None:
+        quantities = current_quantities(document)
     rows=[]
     for store in document.get('stores',[]):
         if store.get('archivedAt'):continue
         for product in local_products(document,store['id']):
-            quantity=current_quantity(document,product['id'],store['id'])
+            quantity=quantities.get((product['id'],store['id']))
             if at_minimum(product,quantity):rows.append({'productId':product['id'],'productName':product['name'],'storeId':store['id'],'storeName':store['name'],'quantity':quantity,'minimum':product.get('min',0),'unit':product['unit']})
     return rows
 
