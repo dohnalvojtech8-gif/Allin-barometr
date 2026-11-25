@@ -859,5 +859,22 @@ def venue_cards_script():return send_from_directory(WEB,'venue-cards.js')
 @app.get('/team.js')
 def team_script():return send_from_directory(WEB,'team.js')
 
+
+@app.post('/public-scanner/use')
+def public_scanner_use():
+    origin = request.headers.get('Origin')
+    allowed = {'https://noira-inventury.onrender.com', 'https://noira-inventury.cz', 'https://www.noira-inventury.cz'}
+    if origin not in allowed:
+        return '', 403
+    event_id = request.form.get('scan', '')
+    if not re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}', event_id):
+        return '', 400
+    rate_limit(['public-scan:'+client_ip()], 60, 600)
+    logging.warning('NOIRA_PUBLIC_SCAN %s', event_id)
+    response = make_response('', 204)
+    response.headers['Access-Control-Allow-Origin'] = origin
+    response.headers['Vary'] = 'Origin'
+    return response
+
 if __name__=='__main__':app.run(host='0.0.0.0',port=int(os.environ.get('PORT','10000')))
 
