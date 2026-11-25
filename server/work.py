@@ -187,8 +187,13 @@ def register(app):
     def status():
         with db() as c:
             d=device(c);u=employee(c,d)
-            if not u:return jsonify(locked=True,csrf=d['csrf'])
-            return jsonify(locked=False,csrf=u['csrf'],name=(u['first_name']+' '+u['last_name']).strip(),permissions=effective_permissions(u),idleSeconds=IDLE,expiresAt=u['last_activity']+IDLE,isOwner=u['role']=='admin')
+        # The paired device identifies the owner even while the terminal is locked.
+        # Read centrally after closing the venue connection (also safe for SQLite).
+        with db(central=True) as c:
+            appearance=one(c,'SELECT theme FROM owner_appearance WHERE owner_id=%s',(d['owner_id'],))
+        theme=appearance['theme'] if appearance else 1
+        if not u:return jsonify(locked=True,csrf=d['csrf'],theme=theme)
+        return jsonify(locked=False,csrf=u['csrf'],name=(u['first_name']+' '+u['last_name']).strip(),permissions=effective_permissions(u),idleSeconds=IDLE,expiresAt=u['last_activity']+IDLE,isOwner=u['role']=='admin',theme=theme)
 
     @app.post('/api/work/login')
     def pin_login():

@@ -56,6 +56,7 @@ def password_ok(value,hashed):
     except (ValueError,TypeError):return False
 DUMMY=password_hash(secrets.token_urlsafe(24))
 SCHEMA=[
+'''CREATE TABLE IF NOT EXISTS owner_appearance (owner_id TEXT PRIMARY KEY, theme INTEGER NOT NULL DEFAULT 1 CHECK(theme IN (1,2,3,4,6,8)))''',
 '''CREATE TABLE IF NOT EXISTS public_scan_images (id TEXT PRIMARY KEY,jpeg TEXT NOT NULL,created_at DOUBLE PRECISION NOT NULL)''',
 '''CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT NOT NULL, username_key TEXT UNIQUE NOT NULL, first_name TEXT NOT NULL, last_name TEXT NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin','user')), status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','suspended')), created_at DOUBLE PRECISION NOT NULL, last_login DOUBLE PRECISION, last_seen DOUBLE PRECISION, login_count INTEGER NOT NULL DEFAULT 0, state_json TEXT NOT NULL DEFAULT '{}', permissions_json TEXT NOT NULL DEFAULT '{}',stock_owner_id TEXT REFERENCES users(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED)''',
 '''CREATE TABLE IF NOT EXISTS stock_documents (user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,revision INTEGER NOT NULL DEFAULT 0,data_json TEXT NOT NULL,updated_at DOUBLE PRECISION NOT NULL)''',
@@ -836,6 +837,28 @@ from server.bar_stock import register as register_bar_stock
 register_bar_stock(app)
 from server.deliveries import register as register_deliveries
 register_deliveries(app)
+
+@app.route('/api/appearance',methods=['GET','PUT'])
+@authenticated()
+def appearance_settings():
+    venue=getattr(g,'venue',None)
+    if not venue and g.user['role']!='admin':raise ApiError('Přístup je omezen na majitele.',403)
+    owner=venue['owner_id'] if venue else owner_scope()
+    if request.method=='PUT' and (venue or g.user['role']!='admin'):
+        raise ApiError('Vzhled může změnit pouze majitel v centrálním nastavení.',403)
+    with db(central=True) as c:
+        if request.method=='PUT':
+            theme=body().get('theme')
+            if type(theme) is not int or theme not in (1,2,3,4,6,8):raise ApiError('Neplatný vzhled.')
+            execute(c,'INSERT INTO owner_appearance (owner_id,theme) VALUES (%s,%s) ON CONFLICT(owner_id) DO UPDATE SET theme=excluded.theme',(owner,theme))
+        row=one(c,'SELECT theme FROM owner_appearance WHERE owner_id=%s',(owner,))
+    return jsonify(theme=row['theme'] if row else 1)
+
+@app.get('/appearance.js')
+def appearance_script():return send_from_directory(WEB,'appearance.js')
+
+@app.get('/appearance.css')
+def appearance_styles():return send_from_directory(WEB,'appearance.css')
 
 @app.get('/noira.css')
 def noira_theme():return send_from_directory(WEB,'noira.css')
