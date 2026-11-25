@@ -5,8 +5,14 @@ window.BarometrStock={create:async function({api,send,render,navigate:go,toast,t
  const canBar=()=>can('inventory.run')&&can('inventory.bar'),canWarehouse=()=>can('inventory.run')&&can('inventory.warehouse');
  const date=d=>new Date(d).toLocaleDateString((window.NoiraI18n?.locale||'cs-CZ')),stamp=()=>new Date().toISOString(),empty={stores:[],products:[],counts:[],moves:[],draft:null,barInventories:[],barDraft:null};
  let lastPending=[],submittedIds=new Set();
-  try{submittedIds=new Set((await api('/api/inventory/submissions')).submissions.map(r=>r.id))}catch{}
-  let initial;try{initial=await api('/api/stock')}catch(e){if(e.status!==403)throw e;initial={data:empty,revision:0}}
+ const [reviews,initial]=await Promise.all([
+  can('stock.view')?api('/api/inventory/submissions?view=ids').catch(()=>null):null,
+  api('/api/stock').catch(error=>{
+   if(error.status!==403)throw error;
+   return {data:empty,revision:0};
+  })
+ ]);
+ if(reviews)submittedIds=new Set(reviews.submissions.map(row=>row.id));
  let data={...empty,...initial.data},revision=initial.revision,latestChanges=initial.latestChanges||{},busy=false,draftTimer=null;
  const reference=window.BarometrReference;
  const displayName=value=>`<bdi translate="no">${esc(value)}</bdi>`;

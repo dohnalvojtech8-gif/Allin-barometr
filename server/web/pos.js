@@ -4,7 +4,13 @@ window.NoiraPOS=(()=>{
  const money=(value,currency)=>value===null?'Chybí náklady':`<span data-noira-money="${value}" data-noira-currency="${esc(currency)}">${new Intl.NumberFormat(window.NoiraI18n?.locale||'cs-CZ',{style:'currency',currency}).format(value/100)}</span>`;
  const date=value=>value?`<time data-noira-date="${esc(value)}">${new Date(value+'T12:00:00').toLocaleDateString(window.NoiraI18n?.locale||'cs-CZ')}</time>`:'—';
  const timestamp=value=>value?`<time data-noira-time="${value}">${new Date(value*1000).toLocaleString(window.NoiraI18n?.locale||'cs-CZ')}</time>`:'—';
- async function refresh(){state=await auth.api('/api/owner/pos');return state}
+ let refreshVersion=0;
+ async function refresh(){
+  const version=++refreshVersion;
+  const result=await auth.api('/api/owner/pos');
+  if(version===refreshVersion)state=result;
+  return state;
+ }
  function summary(id){const v=state.venues.find(v=>v.id===id);if(!v?.latest)return '';return `<section class="pos-card-result"><small>Poslední uzavřený den · ${date(v.latest.business_date)}</small>${(v.latestResults||[v.latest]).map(d=>`<div><span>Tržby bez DPH · ${esc(d.currency)}</span><strong>${money(d.revenue_net,d.currency)}</strong></div><div><span>Odhad zisku · ${esc(d.currency)}</span><strong>${money(d.profit,d.currency)}</strong></div>`).join('')}<small>Import: ${timestamp(v.lastImport?.created_at)}</small><a href="#comparison" data-pos-filter="${v.id}">Denní historie →</a></section>`}
 
  function settings(){setTimeout(loadSettings,0);return '<section class="hub-panel" id="pos-settings"><h2>Pokladny a denní uzávěrky</h2><p>Import denních souhrnů pro jednotlivé pobočky.</p><div data-pos-settings></div><p data-pos-settings-message role="status"></p></section>'}

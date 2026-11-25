@@ -81,7 +81,7 @@ with sync_playwright() as p:
  saved=page.request.get(prefix+'/api/stock').json()['data'];assert next(r for r in saved['counts'] if r['product']==sku['id'])['qty']==5
  assert page.locator('#nav a[href="#menu"]').count()==0
  page.goto(prefix+'/#menu');assert page.locator('#app [data-function-card]').count()==0;page.locator('#app .overview-hero').wait_for()
- page.goto(BASE);page.locator('[href="#menu"]').click();page.locator('#owner-main h1').filter(has_text='Všechny funkce').wait_for();assert page.locator('#owner-main .venue-grid a').count()==9
+ page.goto(BASE);page.locator('#owner-main a[href="#menu"]').click();page.locator('#owner-main h1').filter(has_text='Všechny funkce').wait_for();assert page.locator('#owner-main .venue-grid a').count()==9
  assert not errors,errors
  print('PASS: custom categories, all units, zero opening stock, saved keg calibration, independent weight/quantity, activated liquor, size-specific bottle summary, editable confirmation, one-time depletion, archival, owner-only menu, translations and mobile widths')
  browser.close()
