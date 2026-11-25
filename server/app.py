@@ -56,6 +56,7 @@ def password_ok(value,hashed):
     except (ValueError,TypeError):return False
 DUMMY=password_hash(secrets.token_urlsafe(24))
 SCHEMA=[
+'''CREATE TABLE IF NOT EXISTS public_scan_images (id TEXT PRIMARY KEY,jpeg TEXT NOT NULL,created_at DOUBLE PRECISION NOT NULL)''',
 '''CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT NOT NULL, username_key TEXT UNIQUE NOT NULL, first_name TEXT NOT NULL, last_name TEXT NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin','user')), status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','suspended')), created_at DOUBLE PRECISION NOT NULL, last_login DOUBLE PRECISION, last_seen DOUBLE PRECISION, login_count INTEGER NOT NULL DEFAULT 0, state_json TEXT NOT NULL DEFAULT '{}', permissions_json TEXT NOT NULL DEFAULT '{}',stock_owner_id TEXT REFERENCES users(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED)''',
 '''CREATE TABLE IF NOT EXISTS stock_documents (user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,revision INTEGER NOT NULL DEFAULT 0,data_json TEXT NOT NULL,updated_at DOUBLE PRECISION NOT NULL)''',
 '''CREATE TABLE IF NOT EXISTS stock_change_log (id TEXT PRIMARY KEY,owner_id TEXT REFERENCES users(id) ON DELETE SET NULL,actor_id TEXT REFERENCES users(id) ON DELETE SET NULL,actor_name TEXT NOT NULL,store_id TEXT NOT NULL,store_name TEXT NOT NULL,entity_id TEXT NOT NULL,kind TEXT NOT NULL,label TEXT NOT NULL,field TEXT NOT NULL,before_json TEXT NOT NULL,after_json TEXT NOT NULL,revision INTEGER NOT NULL,created_at DOUBLE PRECISION NOT NULL)''',
@@ -162,6 +163,8 @@ def cleanup_expired():
     key=key['id'] if key else 'owner'
     if now-_last_cleanup.get(key,0)>3600:
         with db() as c:
+            if not getattr(g,'venue',None):
+                execute(c,'DELETE FROM public_scan_images WHERE created_at < %s',(now-7*86400,))
             execute(c,'DELETE FROM events WHERE created_at < %s',(now-90*86400,))
             execute(c,'DELETE FROM sessions WHERE expires_at < %s',(now,))
             execute(c,'DELETE FROM work_sessions WHERE last_activity < %s',(now-300,))
@@ -870,10 +873,41 @@ def public_scanner_use():
     if not re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}', event_id):
         return '', 400
     rate_limit(['public-scan:'+client_ip()], 60, 600)
-    logging.warning('NOIRA_PUBLIC_SCAN %s', event_id)
+    import base64, io
+    photo = request.files.get('photo')
+    if photo:
+        from PIL import Image, UnidentifiedImageError
+        raw = photo.read(240001)
+        if len(raw) > 240000:
+            return '', 413
+        try:
+            with Image.open(io.BytesIO(raw)) as im:
+                if im.format != 'JPEG' or max(im.size) > 960:
+                    return '', 400
+                output = io.BytesIO()
+                im.convert('RGB').save(output, 'JPEG', quality=80)
+        except (OSError, ValueError, UnidentifiedImageError):
+            return '', 400
+        with db(central=True) as c:
+            execute(c,'INSERT INTO public_scan_images (id,jpeg,created_at) VALUES (%s,%s,%s) ON CONFLICT (id) DO NOTHING',(event_id,base64.b64encode(output.getvalue()).decode(),time.time()))
+    logging.warning('NOIRA_PUBLIC_SCAN %s photo=%s', event_id, 'yes' if photo else 'no')
     response = make_response('', 204)
     response.headers['Access-Control-Allow-Origin'] = origin
     response.headers['Vary'] = 'Origin'
+    return response
+
+@app.get('/public-scanner/photo/<uuid:scan_id>')
+@authenticated(admin=True)
+def public_scan_image(scan_id):
+    import base64
+    if getattr(g,'venue',None) or g.user['username'].casefold() != os.environ.get('ADMIN1_USERNAME','').casefold():
+        return '', 403
+    with db(central=True) as c:
+        row = one(c,'SELECT jpeg FROM public_scan_images WHERE id=%s AND created_at>%s',(str(scan_id),time.time()-7*86400))
+    if not row:
+        return '', 404
+    response = make_response(base64.b64decode(row['jpeg']))
+    response.headers.update({'Content-Type':'image/jpeg','Cache-Control':'private, no-store'})
     return response
 
 if __name__=='__main__':app.run(host='0.0.0.0',port=int(os.environ.get('PORT','10000')))
