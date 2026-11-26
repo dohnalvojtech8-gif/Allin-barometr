@@ -127,3 +127,29 @@ body .restock-alert,body .stock-attention-card,body .attention-case,body .stock-
 .delivery-legend-group{margin:0 0 18px}.delivery-legend-group>summary{font-size:14px;font-weight:600;cursor:pointer}.delivery-legend-group .delivery-legend{margin-top:12px;margin-bottom:0}
 body input.search,body input[type=search],body .search-input{background:#fff;color:#18283d;border-color:#b9c9dd}body input.search::placeholder,body input[type=search]::placeholder{color:#687b91}.to-bar-button{display:flex;margin-top:10px;min-height:42px!important;padding:8px 16px!important;font-size:15px!important;width:max-content}.stock-context small,.bottle-stock-count{color:#475b73}.owner-hub .customizable-venue .opening-widget .opening-state{color:inherit}.owner-hub .customizable-venue .opening-widget .is-open{color:#087443}.owner-hub .customizable-venue .opening-widget .is-closed{color:#b42318}
 body .work-product,body .sheet,body .history-change{background:#fff;color:#18283d;border-color:#d9e2ef}body .work-product:hover{background:#eef5ff}body .work-product strong,body .work-product .qty{color:#174ba0}body .preview{background:#eef3fa;color:#18283d;border-color:#d9e2ef}#work-notice{background:#173b67;color:#fff;border-color:#2563eb}
+
+@media (min-width: 761px) {
+ body { --desktop-sidebar-width: clamp(192px, 17vw, 216px); }
+ .owner-hub .owner-sidebar, body > aside#sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  box-sizing: border-box;
+  width: var(--desktop-sidebar-width);
+  height: 100dvh;
+  padding: 18px 12px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  border-bottom: 0;
+  border-right: 1px solid var(--line);
+ }
+ .owner-hub .owner-content, body > .shell { margin-left: var(--desktop-sidebar-width); }
+ .owner-hub #owner-nav { grid-template-columns: minmax(0, 1fr); gap: 3px; margin: 18px 0; }
+ .owner-hub #owner-nav a, #sidebar #nav a { min-height: 34px; padding: 6px 8px; font-size: 13px; line-height: 1.35; }
+ .owner-hub .owner-brand { margin: 0; letter-spacing: 2px; }
+ .owner-hub .owner-brand .brand-mark { width: 36px; height: 36px; }
+ .owner-hub .owner-brand strong { font-size: 20px; }
+ .owner-hub .owner-brand small { font-size: 8px; letter-spacing: 1px; }
+ .owner-hub .sidebar-account, #sidebar .sidebar-account { margin-top: auto; gap: 8px; padding-top: 12px; }
+ .owner-hub .owner-header { height: 58px; padding-inline: 24px; }
+}
